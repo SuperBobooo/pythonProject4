@@ -1,4 +1,4 @@
-# 项目目录结构
+# 初步项目目录结构（只是初步
 
 ```plaintext
 pythonProject4/

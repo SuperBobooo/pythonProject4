@@ -73,7 +73,7 @@ class ECCCipher:
         key = self.derive_key(shared_secret)
 
         # 使用AES加密数据
-        from crypto.aes_cipher import AESCipher
+        from algorithms.aes import AESCipher
         cipher = AESCipher(key)
         ciphertext = cipher.encrypt(plaintext)
 
@@ -93,6 +93,6 @@ class ECCCipher:
         key = self.derive_key(shared_secret)
 
         # 使用AES解密数据
-        from crypto.aes_cipher import AESCipher
+        from algorithms.aes import AESCipher
         cipher = AESCipher(key)
         return cipher.decrypt(encrypted_data)

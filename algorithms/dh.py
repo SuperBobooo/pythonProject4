@@ -1,7 +1,7 @@
 import hashlib
 import os
 
-from crypto.utils import pow_mod
+from algorithms.utils import pow_mod
 
 
 class DHKeyExchange:

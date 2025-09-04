@@ -21,7 +21,7 @@ class AESCipher:
 
     def encrypt(self, plaintext):
         """AES加密(CBC模式)"""
-        from crypto.utils import xor_bytes
+        from algorithms.utils import xor_bytes
 
         print("\n[AES Encryption Process]")
         print(f"Key: {self.key.hex()}")
@@ -75,7 +75,7 @@ class AESCipher:
 
     def decrypt(self, ciphertext):
         """AES解密(CBC模式)"""
-        from crypto.utils import xor_bytes
+        from algorithms.utils import xor_bytes
 
         print("\n[AES Decryption Process]")
         print(f"Key: {self.key.hex()}")

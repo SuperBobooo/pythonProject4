@@ -1,10 +1,10 @@
 import os
 
-from comm.socket_comm import SocketCommunicator
-from crypto.aes_cipher import AESCipher
-from crypto.ca_cipher import CACipher
-from crypto.des_cipher import DESCipher
-from crypto.dh import DHKeyExchange
+from network.socket_comm import SocketCommunicator
+from algorithms.aes import AESCipher
+from algorithms.ca import CACipher
+from algorithms.des import DESCipher
+from algorithms.dh import DHKeyExchange
 
 
 def print_hex(data, prefix="", max_len=32):

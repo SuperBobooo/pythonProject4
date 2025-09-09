@@ -19,11 +19,11 @@ def ensure_receive_dir():
 def select_cipher(key, cipher_type):
     """选择加密算法"""
     if cipher_type == 'CA':
-        return CACipher(key)
+        return CACipher(key[:16])   # 确保是 16 字节
     elif cipher_type == 'AES':
-        return AESCipher(key)
+        return AESCipher(key[:16])  # AES 一般用 16 字节（128-bit）
     elif cipher_type == 'DES':
-        return DESCipher(key[:8])
+        return DESCipher(key[:8])   # DES 需要 8 字节
     else:
         raise ValueError(f"Unsupported cipher type: {cipher_type}")
 
@@ -44,10 +44,14 @@ def run_server():
         print(f"Server private key: {hex(private_key)}")
         print(f"Server public key: {hex(public_key)}")
 
+        # 发送服务器公钥
         comm.send_message(conn, str(public_key).encode())
+
+        # 接收客户端公钥
         other_public_key = int(comm.receive_message(conn).decode())
         print(f"Received client public key: {hex(other_public_key)}")
 
+        # 生成共享密钥
         shared_secret = dh.generate_shared_secret(private_key, other_public_key)
         aes_key = dh.derive_aes_key(shared_secret)
         print(f"\n[Shared Secret Established]")
@@ -73,28 +77,35 @@ def run_server():
                 decrypted = cipher.decrypt(encrypted)
                 print(f"Decrypted message: {decrypted.decode()}")
 
-                response = input("Enter response message: ")
+                response = f"Server received your message: {decrypted.decode()}"
                 encrypted_resp = cipher.encrypt(response.encode())
                 comm.send_message(conn, encrypted_resp)
+
 
             elif request == 'FILE':
+
                 cipher_type = comm.receive_message(conn).decode()
                 cipher = select_cipher(aes_key, cipher_type)
-                print(f"Using {cipher_type} cipher")
-
-                encrypted_filename = comm.receive_message(conn)
-                filename = cipher.decrypt(encrypted_filename).decode()
-                encrypted_data = comm.receive_message(conn)
-                decrypted = cipher.decrypt(encrypted_data)
-
+                enc_header = comm.receive_message(conn)
+                header = cipher.decrypt(enc_header).decode()
+                filename, filesize = header.split(":")
+                filesize = int(filesize)
+                print(f"[SERVER] Receiving file {filename} ({filesize} bytes)")
                 save_path = os.path.join(receive_dir, filename)
-                with open(save_path, 'wb') as f:
-                    f.write(decrypted)
-                print(f"File saved to: {save_path}")
+                received_size = 0
+                with open(save_path, "wb") as f:
+                    while True:
+                        enc_chunk = comm.receive_message(conn)
+                        if enc_chunk == b"EOF":
+                            break
+                        chunk = cipher.decrypt(enc_chunk)
+                        f.write(chunk)
+                        received_size += len(chunk)
 
+                print(f"[SERVER] File saved: {save_path} ({received_size}/{filesize} bytes)")
                 response = f"File '{filename}' received successfully"
-                encrypted_resp = cipher.encrypt(response.encode())
-                comm.send_message(conn, encrypted_resp)
+                enc_resp = cipher.encrypt(response.encode())
+                comm.send_message(conn, enc_resp)
 
             elif request == 'EXIT':
                 print("Client requested to exit")

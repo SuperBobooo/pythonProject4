@@ -341,22 +341,50 @@ class EncryptTransferClient(tk.Frame):
         filepath = filedialog.askopenfilename()
         if not filepath:
             return
+
         filename = os.path.basename(filepath)
-        data = open(filepath, "rb").read()
+        filesize = os.path.getsize(filepath)
 
-        cipher = self.cipher_type_var.get()
-        enc_data = self.encrypt_data(data, cipher)
+        # 构建文件头并处理填充
+        header = f"{filename}:{filesize}".encode()
 
-        enc_path = os.path.join(ENC_DIR, filename + ".enc")
-        with open(enc_path, "wb") as f:
-            f.write(enc_data)
-        self.log(f"[CLIENT] 文件已加密保存到 {enc_path}")
+        # 如果是DES加密，添加PKCS#7填充
+        if isinstance(self.cipher, DESCipher):
+            pad_len = 8 - (len(header) % 8)
+            header += bytes([pad_len] * pad_len)
 
-        self.comm.send_message(self.sock, b"FILE")
-        self.comm.send_message(self.sock, cipher.encode())
-        self.comm.send_message(self.sock, filename.encode())
-        self.comm.send_message(self.sock, enc_data)
-        self.log(f"[CLIENT] 文件 {filename} 已发送")
+        try:
+            # 发送文件传输请求
+            self.comm.send_message(self.sock, b"FILE")
+            self.comm.send_message(self.sock, self.cipher_type.get().encode())
+            self.comm.send_message(self.sock, self.cipher.encrypt(header))
+
+            # 分块发送文件内容
+            with open(filepath, "rb") as f:
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+
+                    # 如果是DES加密且不是完整块，添加填充
+                    if isinstance(self.cipher, DESCipher) and len(chunk) % 8 != 0:
+                        pad_len = 8 - (len(chunk) % 8)
+                        chunk += bytes([pad_len] * pad_len)
+
+                    enc_chunk = self.cipher.encrypt(chunk)
+                    self.comm.send_message(self.sock, enc_chunk)
+
+            # 发送结束标志
+            self.comm.send_message(self.sock, b"EOF")
+
+            # 接收服务器响应
+            response = self.comm.receive_message(self.sock)
+            decrypted = self.cipher.decrypt(response)
+            self.log(f"[SERVER RESPONSE] {decrypted.decode()}")
+
+        except Exception as e:
+            self.log(f"[ERROR] File transfer failed: {str(e)}")
+            messagebox.showerror("Error", f"File transfer failed: {str(e)}")
 
     def encrypt_data(self, data: bytes, cipher: str) -> bytes:
         if cipher == "AES":

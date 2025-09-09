@@ -82,30 +82,70 @@ def run_server():
                 comm.send_message(conn, encrypted_resp)
 
 
+
             elif request == 'FILE':
 
                 cipher_type = comm.receive_message(conn).decode()
-                cipher = select_cipher(aes_key, cipher_type)
-                enc_header = comm.receive_message(conn)
-                header = cipher.decrypt(enc_header).decode()
-                filename, filesize = header.split(":")
-                filesize = int(filesize)
-                print(f"[SERVER] Receiving file {filename} ({filesize} bytes)")
-                save_path = os.path.join(receive_dir, filename)
-                received_size = 0
-                with open(save_path, "wb") as f:
-                    while True:
-                        enc_chunk = comm.receive_message(conn)
-                        if enc_chunk == b"EOF":
-                            break
-                        chunk = cipher.decrypt(enc_chunk)
-                        f.write(chunk)
-                        received_size += len(chunk)
 
-                print(f"[SERVER] File saved: {save_path} ({received_size}/{filesize} bytes)")
-                response = f"File '{filename}' received successfully"
-                enc_resp = cipher.encrypt(response.encode())
-                comm.send_message(conn, enc_resp)
+                cipher = select_cipher(aes_key, cipher_type)
+
+                enc_header = comm.receive_message(conn)
+
+                try:
+
+                    # 解密并处理可能的填充
+
+                    header = cipher.decrypt(enc_header)
+
+                    # 对于DES加密，移除可能的填充
+
+                    if isinstance(cipher, DESCipher):
+
+                        # 查找最后一个非零字节作为消息结束
+
+                        last_byte = header[-1]
+
+                        if last_byte < 8:  # 可能是填充长度
+
+                            header = header[:-last_byte]
+
+                    # 验证并解码头部
+
+                    header_str = header.decode('utf-8', errors='strict')
+
+                    filename, filesize = header_str.split(":")
+
+                    filesize = int(filesize)
+
+                    print(f"[SERVER] Receiving file {filename} ({filesize} bytes)")
+
+                    save_path = os.path.join(receive_dir, filename)
+
+                    with open(save_path, "wb") as f:
+
+                        while True:
+
+                            enc_chunk = comm.receive_message(conn)
+
+                            if enc_chunk == b"EOF":
+                                break
+
+                            chunk = cipher.decrypt(enc_chunk)
+
+                            f.write(chunk)
+
+                    response = f"File '{filename}' received successfully"
+
+                    comm.send_message(conn, cipher.encrypt(response.encode()))
+
+
+                except Exception as e:
+
+                    error_msg = f"File transfer failed: {str(e)}"
+
+                    print(f"[SERVER ERROR] {error_msg}")
+
+                    comm.send_message(conn, cipher.encrypt(b"FILE_TRANSFER_ERROR"))
 
             elif request == 'EXIT':
                 print("Client requested to exit")

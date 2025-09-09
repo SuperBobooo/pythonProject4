@@ -57,7 +57,7 @@ class SocketCommunicator:
         # 发送文件内容
         with open(filepath, 'rb') as f:
             while True:
-                data = f.read(4096)
+                data = f.read(4096*1024)
                 if not data:
                     break
                 conn.sendall(data)
@@ -82,7 +82,7 @@ class SocketCommunicator:
         with open(save_path, 'wb') as f:
             remaining = filesize
             while remaining > 0:
-                chunk_size = 4096 if remaining >= 4096 else remaining
+                chunk_size = 4096*1024 if remaining >= 4096*1024 else remaining
                 data = self._recv_all(conn, chunk_size)
                 if not data:
                     break

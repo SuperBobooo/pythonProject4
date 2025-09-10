@@ -45,3 +45,37 @@
 2025-09-10 20:40:03,764 - crypto_system - INFO - 主窗口初始化完成
 2025-09-10 20:40:32,430 - crypto_system - INFO - 加密完成 - 算法: caesar, 明文长度: 3
 2025-09-10 20:40:48,364 - crypto_system - INFO - 程序结束
+2025-09-10 21:04:59,248 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:05:29,918 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:12:40,062 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:12:47,398 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:13:09,763 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:13:27,190 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:13:33,460 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:14:23,308 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:15:32,023 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:15:35,602 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:15:51,096 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:15:54,937 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:16:05,678 - crypto_system - INFO - 服务器已停止
+2025-09-10 21:19:13,810 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:19:16,903 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:19:23,429 - crypto_system - INFO - 服务器已停止
+2025-09-10 21:20:48,513 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:20:51,623 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:20:54,996 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:20:57,794 - crypto_system - INFO - 服务器已停止
+2025-09-10 21:23:45,656 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:23:50,173 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:24:00,105 - crypto_system - INFO - 服务器已停止
+2025-09-10 21:24:43,772 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:25:18,207 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:25:20,432 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:25:31,545 - crypto_system - INFO - 服务器已停止
+2025-09-10 21:26:18,516 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:26:25,562 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888
+2025-09-10 21:26:29,715 - crypto_system - INFO - 服务器已停止
+2025-09-10 21:27:50,265 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:28:05,647 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:29:33,276 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 21:29:37,666 - crypto_system - INFO - 服务器启动成功，监听 localhost:8888

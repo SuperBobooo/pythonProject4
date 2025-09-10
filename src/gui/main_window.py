@@ -7,7 +7,8 @@ from tkinter import ttk, messagebox, filedialog, scrolledtext
 import threading
 import os
 import sys
-
+from src.network.test.server import run_server  # 导入 server.py 中的 run_server 函数
+from src.network.test.client import ClientApp
 # 添加项目根目录到Python路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
@@ -645,36 +646,58 @@ class MainWindow:
     
     # 网络相关方法
     def _start_server(self):
-        """启动服务器"""
+        """启动服务器并打开客户端窗口"""
         try:
+            # 启动服务器
+            server_thread = threading.Thread(target=self._run_server, daemon=True)
+            server_thread.start()
+
+            # 更新网络状态
+            self.network_status_var.set("服务器运行中")
+            self.status_var.set("服务器已启动")
+            self._log_message("服务器已启动")
+
+
+        except Exception as e:
+            messagebox.showerror("错误", f"启动服务器失败: {e}")
+
+    def _run_server(self):
+        """运行服务器"""
+        run_server()  # 调用 server.py 中的 run_server 函数
+
+    def _connect_client(self):
+        """启动服务器并打开客户端窗口"""
+        try:
+            # 启动服务器
             self.server = SocketServer()
             self.file_transfer_server = FileTransferServer(self.server)
             self.server.set_file_handler(self.file_transfer_server.handle_file_transfer)
-            
+
             # 在单独线程中启动服务器
             server_thread = threading.Thread(target=self.server.start)
             server_thread.daemon = True
             server_thread.start()
-            
+
+            # 更新网络状态
             self.network_status_var.set("服务器运行中")
             self.status_var.set("服务器已启动")
             self._log_message("服务器已启动")
+
+            # 打开客户端窗口
+            self._open_client_window()
+
         except Exception as e:
             messagebox.showerror("错误", f"启动服务器失败: {e}")
-    
-    def _connect_client(self):
-        """连接客户端"""
-        try:
-            self.client = SocketClient()
-            if self.client.connect():
-                self.file_transfer_client = FileTransferClient(self.client)
-                self.network_status_var.set("已连接")
-                self.status_var.set("客户端已连接")
-                self._log_message("客户端已连接到服务器")
-            else:
-                messagebox.showerror("错误", "连接服务器失败")
-        except Exception as e:
-            messagebox.showerror("错误", f"连接失败: {e}")
+
+    def _open_client_window(self):
+        """打开客户端窗口"""
+        # 在新的线程中启动客户端窗口
+        threading.Thread(target=self._run_client_app, daemon=True).start()
+
+    def _run_client_app(self):
+        """运行客户端应用"""
+        client_app = ClientApp()  # 创建 ClientApp 实例
+        client_app.mainloop()  # 启动客户端窗口的 Tkinter 主循环
     
     def _disconnect(self):
         """断开连接"""

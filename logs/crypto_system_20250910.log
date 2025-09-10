@@ -38,3 +38,10 @@
 2025-09-10 18:54:33,628 - crypto_system - ERROR - 加密失败: 算法执行失败: 'RSACipher' object has no attribute 'set_public_key'
 2025-09-10 18:55:27,090 - crypto_system - INFO - 哈希计算完成 - 算法: md5, 输入长度: 13
 2025-09-10 18:57:24,752 - crypto_system - INFO - 程序结束
+2025-09-10 20:39:13,063 - crypto_system - INFO - 程序启动
+2025-09-10 20:39:13,185 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 20:39:40,759 - crypto_system - INFO - 程序结束
+2025-09-10 20:40:03,529 - crypto_system - INFO - 程序启动
+2025-09-10 20:40:03,764 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 20:40:32,430 - crypto_system - INFO - 加密完成 - 算法: caesar, 明文长度: 3
+2025-09-10 20:40:48,364 - crypto_system - INFO - 程序结束

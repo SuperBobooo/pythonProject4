@@ -47,8 +47,6 @@ def apply_style():
               background=[("active", "#357ABD")])
     style.configure("TLabel", font=("Arial", 11))
     style.configure("TEntry", font=("Consolas", 11))
-
-
 # ===================== ECC Proxy =====================
 class ECCProxyClient(tk.Frame):
     def __init__(self, master):

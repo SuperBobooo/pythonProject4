@@ -3,16 +3,15 @@ import socket
 import hashlib
 import threading
 import tkinter as tk
-from tkinter import scrolledtext, filedialog, messagebox, ttk
+from tkinter import scrolledtext, ttk
 
-from src.algorithms.dh_1 import DHKeyExchange
-from src.algorithms.ca_1 import CACipher
-from src.algorithms.aes_1 import AESCipher
 from src.algorithms.des_1 import DESCipher
+from src.algorithms.dh_1 import DHKeyExchange
+from src.algorithms.aes_1 import AESCipher
+from src.algorithms.ca_1 import CACipher  # CA 加密算法
 from src.network.socket_comm import SocketCommunicator
 
 RECEIVE_DIR = 'received_files'
-
 
 def ensure_receive_dir():
     """确保接收目录存在"""
@@ -21,20 +20,20 @@ def ensure_receive_dir():
         print(f"Created receive directory: {RECEIVE_DIR}")
     return os.path.abspath(RECEIVE_DIR)
 
-
 def select_cipher(key, cipher_type):
+
     """选择加密算法"""
-    if cipher_type == 'CA':
-        return CACipher(key[:16])  # 确保是 16 字节
-    elif cipher_type == 'AES':
+    if cipher_type == 'AES':
         return AESCipher(key[:16])  # AES 一般用 16 字节（128-bit）
     elif cipher_type == 'DES':
         return DESCipher(key[:8])  # DES 需要 8 字节
+    elif cipher_type == 'CA':
+        return CACipher(key[:16])  # CA 需要 16 字节
     else:
         raise ValueError(f"Unsupported cipher type: {cipher_type}")
 
-
 def run_server(log_function):
+    global cipher_type
     receive_dir = ensure_receive_dir()
     log_function(f"All received files will be saved to: {receive_dir}")
 
@@ -43,6 +42,9 @@ def run_server(log_function):
     public_key = dh.generate_public_key(private_key)
     comm = SocketCommunicator(port=12345)
     conn = comm.start_server()
+
+    global aes_key
+    aes_key = None
 
     try:
         log_function("\n[DH Key Exchange]")
@@ -81,14 +83,8 @@ def run_server(log_function):
                 encrypted = comm.receive_message(conn)
                 log_function(f"Received encrypted message: {encrypted.hex()}")
 
-                # 解密过程
-                decrypted = cipher.decrypt(encrypted)
-                log_function(f"Decrypted message: {decrypted.decode()}")
-
-                response = f"Server received your message: {decrypted.decode()}"
-                encrypted_resp = cipher.encrypt(response.encode())
-                comm.send_message(conn, encrypted_resp)
-                log_function(f"Sent encrypted response: {encrypted_resp.hex()}")
+                # 将密文显示到左侧输入框
+                app.update_input_area(encrypted.hex())
 
             elif request == 'FILE':
                 cipher_type = comm.receive_message(conn).decode()
@@ -119,9 +115,7 @@ def run_server(log_function):
                             enc_chunk = comm.receive_message(conn)
                             if enc_chunk == b"EOF":
                                 break
-                            # log_function(f"Received encrypted chunk: {enc_chunk.hex()}")
                             chunk = cipher.decrypt(enc_chunk)
-                            # log_function(f"Decrypted chunk: {chunk.hex()}")
                             f.write(chunk)
 
                     response = f"File '{filename}' received successfully"
@@ -146,16 +140,84 @@ class ServerGUI(tk.Tk):
         self.title("Secure Server")
         self.geometry("800x600")
 
-        self.text_area = scrolledtext.ScrolledText(self, wrap=tk.WORD, width=90, height=25,
-                                                   font=("Consolas", 10), bg="black", fg="lime")
-        self.text_area.pack(fill="both", expand=True, padx=10, pady=10)
+        # Create a frame to hold both the left and right sections
+        frame = tk.Frame(self)
+        frame.pack(fill="both", expand=True)
 
-        self.start_button = ttk.Button(self, text="Start Server", command=self.start_server)
-        self.start_button.pack(pady=10)
+        # Left side - large input area (白底黑字)
+        self.input_area = scrolledtext.ScrolledText(
+            frame,
+            wrap=tk.WORD,
+            width=50,
+            height=25,
+            font=("Consolas", 10),
+            bg="white",  # 背景白色
+            fg="black"   # 文字黑色
+        )
+        self.input_area.grid(row=0, column=0, padx=10, pady=10)
+
+        # Right side - command section
+        self.command_area = tk.Frame(frame)
+        self.command_area.grid(row=0, column=1, padx=10, pady=10)
+
+        # Create a button to decrypt the message in the input area
+        self.decrypt_button = ttk.Button(self.command_area, text="Decrypt Message", command=self.decrypt_message)
+        self.decrypt_button.pack(pady=10)
+
+        # Output log area (黑底绿字)
+        self.log_area = scrolledtext.ScrolledText(
+            self.command_area,
+            wrap=tk.WORD,
+            width=30,
+            height=25,
+            font=("Consolas", 10),
+            bg="black",  # 背景黑色
+            fg="lime"    # 文字绿色
+        )
+        self.log_area.pack(fill="both", expand=True)
+
+        self.start_server()  # Start the server immediately when the UI opens
 
     def log(self, message):
-        self.text_area.insert(tk.END, message + "\n")
-        self.text_area.see(tk.END)
+        self.log_area.insert(tk.END, message + "\n")
+        self.log_area.see(tk.END)
+
+    def decrypt_message(self):
+        encrypted_message = self.input_area.get("1.0", tk.END).strip()
+        if encrypted_message:
+            try:
+                # 从输入框获取密文并进行解密
+                encrypted_bytes = bytes.fromhex(encrypted_message)
+
+
+                if cipher_type == 'CA':
+                    cipher = select_cipher(aes_key, 'CA')  # 使用DH交换获得的aes_key
+                    decrypted = cipher.decrypt(encrypted_bytes)
+                    decrypted_message = decrypted.decode('utf-8', errors='ignore')  # 对于无法解码的部分，忽略错误
+                elif cipher_type == 'AES':
+                    cipher = select_cipher(aes_key, 'AES')
+                    decrypted = cipher.decrypt(encrypted_bytes)
+                    decrypted_message = decrypted.decode()
+                elif cipher_type == 'DES':
+                    cipher = select_cipher(aes_key, 'DES')
+                    decrypted = cipher.decrypt(encrypted_bytes)
+                    decrypted_message = decrypted.decode()
+                else:
+                    decrypted_message = "Unsupported cipher"
+
+                # 显示解密后的消息
+                self.input_area.delete(1.0, tk.END)
+                self.input_area.insert(tk.END, decrypted_message)
+
+            except Exception as e:
+                self.log(f"Decryption failed: {e}")
+                self.input_area.delete(1.0, tk.END)
+                self.input_area.insert(tk.END, "Decryption failed")
+
+    def update_input_area(self, encrypted_message):
+        """更新左侧输入框中的密文"""
+        self.input_area.delete(1.0, tk.END)
+        self.input_area.insert(tk.END, encrypted_message)
 
     def start_server(self):
         threading.Thread(target=run_server, args=(self.log,), daemon=True).start()
@@ -164,4 +226,3 @@ class ServerGUI(tk.Tk):
 if __name__ == "__main__":
     app = ServerGUI()
     app.mainloop()
-

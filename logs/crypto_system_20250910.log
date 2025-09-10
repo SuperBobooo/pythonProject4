@@ -45,3 +45,7 @@
 2025-09-10 20:40:03,764 - crypto_system - INFO - 主窗口初始化完成
 2025-09-10 20:40:32,430 - crypto_system - INFO - 加密完成 - 算法: caesar, 明文长度: 3
 2025-09-10 20:40:48,364 - crypto_system - INFO - 程序结束
+2025-09-10 20:45:33,451 - crypto_system - INFO - 程序启动
+2025-09-10 20:45:33,784 - crypto_system - INFO - 主窗口初始化完成
+2025-09-10 20:45:47,649 - crypto_system - INFO - 加密完成 - 算法: caesar, 明文长度: 5
+2025-09-10 20:45:59,618 - crypto_system - INFO - 程序结束

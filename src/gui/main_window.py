@@ -154,6 +154,13 @@ class MainWindow:
         self.key_entry = ttk.Entry(self.toolbar, textvariable=self.key_var, width=15)
         self.key_entry.pack(side=tk.LEFT, padx=5)
         
+        # 第二个密钥输入（用于公钥密码）
+        self.key2_label = ttk.Label(self.toolbar, text="私钥:")
+        self.key2_var = tk.StringVar()
+        self.key2_entry = ttk.Entry(self.toolbar, textvariable=self.key2_var, width=15)
+        # 默认隐藏第二个密钥输入框
+        self.key2_visible = False
+        
         # 按钮
         ttk.Button(self.toolbar, text="加密", command=self._encrypt).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.toolbar, text="解密", command=self._decrypt).pack(side=tk.LEFT, padx=5)
@@ -371,6 +378,29 @@ class MainWindow:
         algorithm_name = SUPPORTED_ALGORITHMS[category][algorithm]
         self.algorithm_var.set(algorithm_name)
         self.status_var.set(f"已选择算法: {algorithm_name}")
+        
+        # 根据算法类型显示或隐藏第二个密钥输入框
+        if category == 'public_key':
+            self._show_second_key()
+            # 更新标签文本
+            ttk.Label(self.toolbar, text="密钥:").pack_forget()
+            ttk.Label(self.toolbar, text="公钥:").pack(side=tk.LEFT, padx=5, before=self.key_entry)
+        else:
+            self._hide_second_key()
+    
+    def _show_second_key(self):
+        """显示第二个密钥输入框"""
+        if not self.key2_visible:
+            self.key2_label.pack(side=tk.LEFT, padx=5)
+            self.key2_entry.pack(side=tk.LEFT, padx=5)
+            self.key2_visible = True
+    
+    def _hide_second_key(self):
+        """隐藏第二个密钥输入框"""
+        if self.key2_visible:
+            self.key2_label.pack_forget()
+            self.key2_entry.pack_forget()
+            self.key2_visible = False
     
     def _encrypt(self):
         """加密"""
@@ -383,15 +413,32 @@ class MainWindow:
             messagebox.showwarning("警告", "请输入明文")
             return
         
+        key = self.key_var.get().strip()
+        key2 = self.key2_var.get().strip() if self.key2_visible else None
+        
+        # 检查密钥输入
+        category, algorithm = self.current_algorithm
+        if category == 'public_key':
+            if not key or not key2:
+                messagebox.showwarning("警告", "公钥密码需要输入公钥和私钥")
+                return
+            combined_key = f"{key}|{key2}"  # 用分隔符组合两个密钥
+        else:
+            if not key:
+                messagebox.showwarning("警告", "请输入密钥")
+                return
+            combined_key = key
+        
         try:
-            # 这里应该调用相应的加密算法
-            # 暂时返回示例结果
-            ciphertext = f"加密结果: {plaintext}"
+            ciphertext = self._execute_algorithm('encrypt', category, algorithm, plaintext, combined_key)
+            
             self.output_text.delete(1.0, tk.END)
             self.output_text.insert(1.0, ciphertext)
             self.status_var.set("加密完成")
+            logger.info(f"加密完成 - 算法: {algorithm}, 明文长度: {len(plaintext)}")
         except Exception as e:
             messagebox.showerror("错误", f"加密失败: {e}")
+            logger.error(f"加密失败: {e}")
     
     def _decrypt(self):
         """解密"""
@@ -404,15 +451,32 @@ class MainWindow:
             messagebox.showwarning("警告", "请输入密文")
             return
         
+        key = self.key_var.get().strip()
+        key2 = self.key2_var.get().strip() if self.key2_visible else None
+        
+        # 检查密钥输入
+        category, algorithm = self.current_algorithm
+        if category == 'public_key':
+            if not key or not key2:
+                messagebox.showwarning("警告", "公钥密码需要输入公钥和私钥")
+                return
+            combined_key = f"{key}|{key2}"  # 用分隔符组合两个密钥
+        else:
+            if not key:
+                messagebox.showwarning("警告", "请输入密钥")
+                return
+            combined_key = key
+        
         try:
-            # 这里应该调用相应的解密算法
-            # 暂时返回示例结果
-            plaintext = f"解密结果: {ciphertext}"
+            plaintext = self._execute_algorithm('decrypt', category, algorithm, ciphertext, combined_key)
+            
             self.output_text.delete(1.0, tk.END)
             self.output_text.insert(1.0, plaintext)
             self.status_var.set("解密完成")
+            logger.info(f"解密完成 - 算法: {algorithm}, 密文长度: {len(ciphertext)}")
         except Exception as e:
             messagebox.showerror("错误", f"解密失败: {e}")
+            logger.error(f"解密失败: {e}")
     
     def _hash(self):
         """计算哈希"""
@@ -426,14 +490,158 @@ class MainWindow:
             return
         
         try:
-            # 这里应该调用相应的哈希算法
-            # 暂时返回示例结果
-            hash_value = f"哈希值: {hash(plaintext)}"
+            category, algorithm = self.current_algorithm
+            if category != 'hash':
+                messagebox.showwarning("警告", "当前选择的不是哈希算法")
+                return
+            
+            hash_value = self._execute_algorithm('hash', category, algorithm, plaintext, None)
+            
             self.output_text.delete(1.0, tk.END)
             self.output_text.insert(1.0, hash_value)
             self.status_var.set("哈希计算完成")
+            logger.info(f"哈希计算完成 - 算法: {algorithm}, 输入长度: {len(plaintext)}")
         except Exception as e:
             messagebox.showerror("错误", f"哈希计算失败: {e}")
+            logger.error(f"哈希计算失败: {e}")
+    
+    def _execute_algorithm(self, operation, category, algorithm, data, key):
+        """
+        执行指定的算法操作
+        
+        Args:
+            operation: 操作类型 ('encrypt', 'decrypt', 'hash')
+            category: 算法类别
+            algorithm: 算法名称
+            data: 输入数据
+            key: 密钥（哈希算法不需要）
+            
+        Returns:
+            处理后的数据
+        """
+        try:
+            # 动态导入算法模块
+            if category == 'classical':
+                if algorithm == 'caesar':
+                    from src.algorithms.caesar import CaesarCipher
+                    cipher = CaesarCipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                elif algorithm == 'vigenere':
+                    from src.algorithms.vigenere import VigenereCipher
+                    cipher = VigenereCipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                elif algorithm == 'playfair':
+                    from src.algorithms.playfair import PlayfairCipher
+                    cipher = PlayfairCipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                elif algorithm == 'column_permutation':
+                    from src.algorithms.column_permutation import ColumnPermutationCipher
+                    cipher = ColumnPermutationCipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                
+            elif category == 'stream':
+                if algorithm == 'rc4':
+                    from src.algorithms.rc4 import RC4Cipher
+                    cipher = RC4Cipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                elif algorithm == 'ca':
+                    from src.algorithms.ca import CACipher
+                    cipher = CACipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                        
+            elif category == 'block':
+                if algorithm == 'aes':
+                    from src.algorithms.aes import AESCipher
+                    cipher = AESCipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                elif algorithm == 'des':
+                    from src.algorithms.des import DESCipher
+                    cipher = DESCipher(key)
+                    if operation == 'encrypt':
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt':
+                        return cipher.decrypt(data)
+                        
+            elif category == 'public_key':
+                # 分离公钥和私钥
+                if key and '|' in key:
+                    public_key, private_key = key.split('|', 1)
+                else:
+                    public_key, private_key = key, None
+                
+                if algorithm == 'rsa':
+                    from src.algorithms.rsa import RSACipher
+                    cipher = RSACipher()
+                    if operation == 'encrypt' and public_key:
+                        cipher.set_public_key(public_key)
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt' and private_key:
+                        cipher.set_private_key(private_key)
+                        return cipher.decrypt(data)
+                elif algorithm == 'ecc':
+                    from src.algorithms.ecc import ECCCipher
+                    cipher = ECCCipher()
+                    if operation == 'encrypt' and public_key:
+                        cipher.set_public_key(public_key)
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt' and private_key:
+                        cipher.set_private_key(private_key)
+                        return cipher.decrypt(data)
+                elif algorithm == 'elgamal':
+                    from src.algorithms.elgamal import ElGamalCipher
+                    cipher = ElGamalCipher()
+                    if operation == 'encrypt' and public_key:
+                        cipher.set_public_key(public_key)
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt' and private_key:
+                        cipher.set_private_key(private_key)
+                        return cipher.decrypt(data)
+                elif algorithm == 'sm2':
+                    from src.algorithms.sm2 import SM2Cipher
+                    cipher = SM2Cipher()
+                    if operation == 'encrypt' and public_key:
+                        cipher.set_public_key(public_key)
+                        return cipher.encrypt(data)
+                    elif operation == 'decrypt' and private_key:
+                        cipher.set_private_key(private_key)
+                        return cipher.decrypt(data)
+                
+            elif category == 'hash':
+                if algorithm == 'md5':
+                    from src.algorithms.md5 import MD5Hash
+                    hasher = MD5Hash()
+                    return hasher.hash(data)
+                    
+            else:
+                raise ValueError(f"不支持的算法类别: {category}")
+                
+            raise ValueError(f"算法 {algorithm} 未实现 {operation} 操作")
+            
+        except ImportError as e:
+            raise Exception(f"无法导入算法模块: {e}")
+        except Exception as e:
+            raise Exception(f"算法执行失败: {e}")
     
     # 网络相关方法
     def _start_server(self):

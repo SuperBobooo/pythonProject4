@@ -21,7 +21,7 @@ BUFFER_SIZE = 4096
 SUPPORTED_ALGORITHMS = {
     'classical': {
         'caesar': 'Caesar Cipher',
-        'vigenere': 'Vigenere Cipher',
+        'vigenere': 'Vigenere Cipher', 
         'playfair': 'Playfair Cipher',
         'column_permutation': 'Column Permutation Cipher'
     },

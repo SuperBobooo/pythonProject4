@@ -1,0 +1,16 @@
+tkinter
+cryptography>=3.4.8
+pycryptodome>=3.15.0
+ecdsa>=0.18.0
+gmssl>=3.2.1
+numpy>=1.21.0
+threading
+socket
+hashlib
+random
+math
+os
+sys
+json
+base64
+binascii

@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
 try:
-    from src.algorithms.dh_1 import DHKeyExchange, DHKeyExchangeDemo
+    from src.algorithms.dh import DHKeyExchange, DHKeyExchangeDemo
 except ImportError:
     # 如果导入失败，创建一个简单的替代类
     class DHKeyExchange:

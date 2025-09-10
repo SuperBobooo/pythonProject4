@@ -2,7 +2,7 @@ import socket
 import threading
 import hashlib
 from src.algorithms.ecc import ECCCipher
-from src.algorithms.aes import AESCipher   # 使用AES
+from src.algorithms.aes_1 import AESCipher   # 使用AES
 
 HOST = "0.0.0.0"
 PORT = 12345

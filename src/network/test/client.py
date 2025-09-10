@@ -6,10 +6,10 @@ import tkinter as tk
 from tkinter import scrolledtext, filedialog, messagebox, ttk
 
 from src.algorithms.ecc import ECCCipher
-from src.algorithms.dh import DHKeyExchange
-from src.algorithms.ca import CACipher
-from src.algorithms.aes import AESCipher
-from src.algorithms.des import DESCipher
+from src.algorithms.dh_1 import DHKeyExchange
+from src.algorithms.ca_1 import CACipher
+from src.algorithms.aes_1 import AESCipher
+from src.algorithms.des_1 import DESCipher
 from src.network.socket_comm import SocketCommunicator
 
 CHUNK_SIZE = 4096 * 1024

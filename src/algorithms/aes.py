@@ -1,121 +1,173 @@
-import os
-
+# -*- coding: utf-8 -*-
+"""
+AES Block Cipher (AES分组密码) 实现
+"""
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+import base64
 
 class AESCipher:
-    def __init__(self, key):
-        """AES密码实现"""
-        if len(key) not in (16, 24, 32):
-            raise ValueError("Key must be 16, 24 or 32 bytes long")
-        self.key = key
-        self.block_size = 16
+    """AES分组密码类"""
+    
+    def __init__(self, key: str = None, mode: str = 'CBC'):
+        """
+        初始化AES密码
+        
+        Args:
+            key: 密钥，如果为None则生成随机密钥
+            mode: 加密模式，支持ECB、CBC、CFB、OFB
+        """
+        if key is None:
+            # 生成16字节随机密钥
+            self.key = get_random_bytes(16)
+        else:
+            # 将字符串密钥转换为16字节
+            key_bytes = key.encode('utf-8')
+            if len(key_bytes) < 16:
+                key_bytes = key_bytes.ljust(16, b'0')
+            elif len(key_bytes) > 16:
+                key_bytes = key_bytes[:16]
+            self.key = key_bytes
+        
+        self.mode = mode.upper()
+        self.iv = None
+    
+    def _get_cipher(self):
+        """获取密码对象"""
+        if self.mode == 'ECB':
+            return AES.new(self.key, AES.MODE_ECB)
+        elif self.mode == 'CBC':
+            if self.iv is None:
+                self.iv = get_random_bytes(16)
+            return AES.new(self.key, AES.MODE_CBC, self.iv)
+        elif self.mode == 'CFB':
+            if self.iv is None:
+                self.iv = get_random_bytes(16)
+            return AES.new(self.key, AES.MODE_CFB, self.iv)
+        elif self.mode == 'OFB':
+            if self.iv is None:
+                self.iv = get_random_bytes(16)
+            return AES.new(self.key, AES.MODE_OFB, self.iv)
+        else:
+            raise ValueError(f"不支持的加密模式: {self.mode}")
+    
+    def encrypt(self, plaintext: str) -> str:
+        """
+        加密明文
+        
+        Args:
+            plaintext: 明文
+            
+        Returns:
+            密文（Base64编码，包含IV）
+        """
+        # 创建密码对象
+        cipher = self._get_cipher()
+        
+        # 将明文转换为字节并填充
+        plaintext_bytes = plaintext.encode('utf-8')
+        if self.mode == 'ECB':
+            padded_plaintext = pad(plaintext_bytes, AES.block_size)
+        else:
+            padded_plaintext = plaintext_bytes
+        
+        # 加密
+        if self.mode == 'ECB':
+            ciphertext_bytes = cipher.encrypt(padded_plaintext)
+        else:
+            ciphertext_bytes = cipher.encrypt(pad(padded_plaintext, AES.block_size))
+        
+        # 组合IV和密文
+        if self.mode == 'ECB':
+            result = ciphertext_bytes
+        else:
+            result = self.iv + ciphertext_bytes
+        
+        # 转换为Base64字符串
+        ciphertext_b64 = base64.b64encode(result).decode('utf-8')
+        
+        return ciphertext_b64
+    
+    def decrypt(self, ciphertext_b64: str) -> str:
+        """
+        解密密文
+        
+        Args:
+            ciphertext_b64: 密文（Base64编码）
+            
+        Returns:
+            明文
+        """
+        # 将Base64字符串转换为字节
+        ciphertext_bytes = base64.b64decode(ciphertext_b64)
+        
+        # 分离IV和密文
+        if self.mode == 'ECB':
+            encrypted_data = ciphertext_bytes
+        else:
+            self.iv = ciphertext_bytes[:16]
+            encrypted_data = ciphertext_bytes[16:]
+        
+        # 创建密码对象
+        cipher = self._get_cipher()
+        
+        # 解密
+        if self.mode == 'ECB':
+            padded_plaintext = cipher.decrypt(encrypted_data)
+            plaintext_bytes = unpad(padded_plaintext, AES.block_size)
+        else:
+            padded_plaintext = cipher.decrypt(encrypted_data)
+            plaintext_bytes = unpad(padded_plaintext, AES.block_size)
+        
+        # 转换为字符串
+        plaintext = plaintext_bytes.decode('utf-8')
+        
+        return plaintext
+    
+    def set_key(self, key: str):
+        """设置密钥"""
+        key_bytes = key.encode('utf-8')
+        if len(key_bytes) < 16:
+            key_bytes = key_bytes.ljust(16, b'0')
+        elif len(key_bytes) > 16:
+            key_bytes = key_bytes[:16]
+        self.key = key_bytes
+        self.iv = None  # 重置IV
+    
+    def set_mode(self, mode: str):
+        """设置加密模式"""
+        self.mode = mode.upper()
+        self.iv = None  # 重置IV
+    
+    def get_key(self) -> str:
+        """获取密钥"""
+        return self.key.decode('utf-8')
+    
+    def get_mode(self) -> str:
+        """获取加密模式"""
+        return self.mode
 
-    def pad(self, data):
-        """PKCS7填充"""
-        padding_len = self.block_size - (len(data) % self.block_size)
-        return data + bytes([padding_len] * padding_len)
+# 测试函数
+def test_aes_cipher():
+    """测试AES密码"""
+    cipher = AESCipher("MySecretKey123", "CBC")
+    
+    # 测试加密
+    plaintext = "Hello, World! 你好，世界！"
+    ciphertext = cipher.encrypt(plaintext)
+    print(f"明文: {plaintext}")
+    print(f"密钥: {cipher.get_key()}")
+    print(f"模式: {cipher.get_mode()}")
+    print(f"密文: {ciphertext}")
+    
+    # 测试解密
+    decrypted = cipher.decrypt(ciphertext)
+    print(f"解密: {decrypted}")
+    
+    # 验证
+    assert decrypted == plaintext, "解密结果与原文不符"
+    print("AES密码测试通过！")
 
-    def unpad(self, data):
-        """PKCS7去填充"""
-        padding_len = data[-1]
-        return data[:-padding_len]
-
-    def encrypt(self, plaintext):
-        """AES加密(CBC模式)"""
-        from src.algorithms.utils import xor_bytes
-
-        print("\n[AES Encryption Process]")
-        print(f"Key: {self.key.hex()}")
-        print(f"Original plaintext length: {len(plaintext)} bytes")
-
-        # 添加PKCS7填充
-        padded = self.pad(plaintext)
-        print(f"After padding (PKCS7): {len(padded)} bytes")
-
-        # 生成随机IV
-        iv = os.urandom(self.block_size)
-        print(f"Generated IV: {iv.hex()}")
-
-        # 分块加密
-        ciphertext = bytearray()
-        prev_block = iv
-
-        for i in range(0, len(padded), self.block_size):
-            block = padded[i:i + self.block_size]
-            print(f"\nBlock {i // self.block_size}:")
-            print(f"  Plaintext block: {block.hex()}")
-
-            # XOR with previous ciphertext block (or IV for first block)
-            xored = xor_bytes(block, prev_block)
-            print(f"  After XOR with {'IV' if i == 0 else 'prev block'}: {xored.hex()}")
-
-            # 简化的AES加密 (实际AES有多轮变换)
-            encrypted_block = self._aes_encrypt_block(xored)
-            print(f"  Encrypted block: {encrypted_block.hex()}")
-
-            ciphertext.extend(encrypted_block)
-            prev_block = encrypted_block
-
-        # 将IV放在密文前面
-        full_ciphertext = iv + ciphertext
-        print(f"\nFinal ciphertext (IV + encrypted data): {full_ciphertext.hex()[:32]}...")
-        return full_ciphertext
-
-    def _aes_encrypt_block(self, block):
-        """简化的AES块加密"""
-        # 实际AES实现应包括:
-        # 1. 密钥扩展
-        # 2. 初始轮密钥加
-        # 3. 9轮常规轮函数
-        # 4. 最终轮函数
-        # 这里简化为使用密钥进行异或
-        encrypted = bytearray()
-        for i in range(len(block)):
-            encrypted.append(block[i] ^ self.key[i % len(self.key)])
-        return bytes(encrypted)
-
-    def decrypt(self, ciphertext):
-        """AES解密(CBC模式)"""
-        from src.algorithms.utils import xor_bytes
-
-        print("\n[AES Decryption Process]")
-        print(f"Key: {self.key.hex()}")
-        print(f"Ciphertext length: {len(ciphertext)} bytes")
-
-        # 提取IV
-        iv = ciphertext[:self.block_size]
-        ciphertext = ciphertext[self.block_size:]
-        print(f"Extracted IV: {iv.hex()}")
-
-        # 分块解密
-        plaintext = bytearray()
-        prev_block = iv
-
-        for i in range(0, len(ciphertext), self.block_size):
-            block = ciphertext[i:i + self.block_size]
-            print(f"\nBlock {i // self.block_size}:")
-            print(f"  Encrypted block: {block.hex()}")
-
-            # 简化的AES解密
-            decrypted_block = self._aes_decrypt_block(block)
-            print(f"  After AES decrypt: {decrypted_block.hex()}")
-
-            # XOR with previous ciphertext block (or IV for first block)
-            xored = xor_bytes(decrypted_block, prev_block)
-            print(f"  After XOR with {'IV' if i == 0 else 'prev block'}: {xored.hex()}")
-
-            plaintext.extend(xored)
-            prev_block = block
-
-        # 去除填充
-        unpadded = self.unpad(plaintext)
-        print(f"\nAfter unpadding: {len(unpadded)} bytes")
-        print(f"Final plaintext: {unpadded.hex()[:32]}...")
-        return unpadded
-
-    def _aes_decrypt_block(self, block):
-        """简化的AES块解密"""
-        # 与实际AES解密过程相反
-        decrypted = bytearray()
-        for i in range(len(block)):
-            decrypted.append(block[i] ^ self.key[i % len(self.key)])
-        return bytes(decrypted)
+if __name__ == "__main__":
+    test_aes_cipher()

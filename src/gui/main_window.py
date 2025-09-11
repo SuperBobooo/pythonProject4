@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
+    # -*- coding: utf-8 -*-
 """
 Main Window Implementation (主窗口实现)
 """
+import subprocess
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
 import threading
@@ -507,19 +508,7 @@ class MainWindow:
             logger.error(f"哈希计算失败: {e}")
     
     def _execute_algorithm(self, operation, category, algorithm, data, key):
-        """
-        执行指定的算法操作
-        
-        Args:
-            operation: 操作类型 ('encrypt', 'decrypt', 'hash')
-            category: 算法类别
-            algorithm: 算法名称
-            data: 输入数据
-            key: 密钥（哈希算法不需要）
-            
-        Returns:
-            处理后的数据
-        """
+
         try:
             # 动态导入算法模块
             if category == 'classical':
@@ -648,14 +637,7 @@ class MainWindow:
     def _start_server(self):
         """启动服务器并打开客户端窗口"""
         try:
-            # 启动服务器
-            server_thread = threading.Thread(target=self._run_server, daemon=True)
-            server_thread.start()
-
-            # 更新网络状态
-            self.network_status_var.set("服务器运行中")
-            self.status_var.set("服务器已启动")
-            self._log_message("服务器已启动")
+            subprocess.Popen("python ../../src/network/C_S/server.py")
 
 
         except Exception as e:
@@ -668,24 +650,7 @@ class MainWindow:
     def _connect_client(self):
         """启动服务器并打开客户端窗口"""
         try:
-            # 启动服务器
-            self.server = SocketServer()
-            self.file_transfer_server = FileTransferServer(self.server)
-            self.server.set_file_handler(self.file_transfer_server.handle_file_transfer)
-
-            # 在单独线程中启动服务器
-            server_thread = threading.Thread(target=self.server.start)
-            server_thread.daemon = True
-            server_thread.start()
-
-            # 更新网络状态
-            self.network_status_var.set("服务器运行中")
-            self.status_var.set("服务器已启动")
-            self._log_message("服务器已启动")
-
-            # 打开客户端窗口
-            self._open_client_window()
-
+            subprocess.Popen("python ../../src/network/C_S/client.py")
         except Exception as e:
             messagebox.showerror("错误", f"启动服务器失败: {e}")
 

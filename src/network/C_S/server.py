@@ -153,44 +153,65 @@ class ServerGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Secure Server")
-        self.geometry("800x600")
+        self.geometry("900x650")
+        self.minsize(800, 600)  # 设置最小窗口尺寸
 
-        # Create a frame to hold both the left and right sections
-        frame = tk.Frame(self)
-        frame.pack(fill="both", expand=True)
+        # 主框架，包含所有内容
+        main_frame = tk.Frame(self, padx=10, pady=10)
+        main_frame.pack(fill="both", expand=True)
 
-        # Left side - large input area (白底黑字)
+        # 创建左右两个主要区域
+        left_frame = tk.Frame(main_frame)
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        right_frame = tk.Frame(main_frame)
+        right_frame.pack(side="right", fill="y")
+
+        # 左侧 - 输入区域
+        input_label = tk.Label(left_frame, text="Input Area", font=("Arial", 12, "bold"))
+        input_label.pack(anchor="w", pady=(0, 5))
+
         self.input_area = scrolledtext.ScrolledText(
-            frame,
+            left_frame,
             wrap=tk.WORD,
-            width=50,
-            height=25,
+            width=60,
+            height=30,
             font=("Consolas", 10),
-            bg="white",  # 背景白色
-            fg="black"   # 文字黑色
+            bg="white",
+            fg="black",
+            padx=5,
+            pady=5
         )
-        self.input_area.grid(row=0, column=0, padx=10, pady=10)
+        self.input_area.pack(fill="both", expand=True)
 
-        # Right side - command section
-        self.command_area = tk.Frame(frame)
-        self.command_area.grid(row=0, column=1, padx=10, pady=10)
+        # 右侧 - 控制面板
+        control_frame = tk.Frame(right_frame)
+        control_frame.pack(fill="x", pady=(0, 10))
 
-        # Create a button to decrypt the message in the input area
-        self.decrypt_button = ttk.Button(self.command_area, text="Decrypt Message", command=self.decrypt_message)
-        self.decrypt_button.pack(pady=10)
+        self.decrypt_button = ttk.Button(
+            control_frame,
+            text="Decrypt Message",
+            command=self.decrypt_message,
+            width=20
+        )
+        self.decrypt_button.pack(fill="x")
 
-        # Output log area (黑底绿字)
+        # 右侧 - 日志区域
+        log_label = tk.Label(right_frame, text="Log Output", font=("Arial", 12, "bold"))
+        log_label.pack(anchor="w", pady=(0, 5))
+
         self.log_area = scrolledtext.ScrolledText(
-            self.command_area,
+            right_frame,
             wrap=tk.WORD,
-            width=30,
-            height=25,
+            width=40,
+            height=30,
             font=("Consolas", 10),
-            bg="black",  # 背景黑色
-            fg="lime"    # 文字绿色
+            bg="black",
+            fg="lime",
+            padx=5,
+            pady=5
         )
         self.log_area.pack(fill="both", expand=True)
-
         self.start_server()  # Start the server immediately when the UI opens
 
     def log(self, message):

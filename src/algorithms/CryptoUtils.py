@@ -6,8 +6,8 @@ from Crypto.PublicKey import RSA, ElGamal
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Util.number import bytes_to_long, long_to_bytes, getRandomRange
-from Cryptodome.Cipher import PKCS1_OAEP
-from Cryptodome.Util.number import getStrongPrime
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Util.number import getStrongPrime
 from typing import Tuple, Union
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes

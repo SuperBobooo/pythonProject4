@@ -53,18 +53,16 @@ def run_server(log_function):
     aes_key = None
 
     try:
-        log_function("\n[DH Key Exchange]")
-        log_function(f"Server private key: {hex(private_key)}")
-        log_function(f"Server public key: {hex(public_key)}")
-        log_function("\n[ECC密钥交换]")
-        log_function(f"服务器私钥: {hex(ecc_cipher.private_key)}")
-        log_function(f"服务器公钥: ({hex(ecc_cipher.public_key[0])}, {hex(ecc_cipher.public_key[1])})")
-
         request = comm.receive_message(conn).decode()
-        print(request)
         if request == 'ECC_REQUEST':
             comm.send_message(conn,str(ecc_cipher.public_key).encode())
+            log_function("\n[ECC密钥交换]")
+            log_function(f"服务器私钥: {hex(ecc_cipher.private_key)}")
+            log_function(f"服务器公钥: ({hex(ecc_cipher.public_key[0])}, {hex(ecc_cipher.public_key[1])})")
         elif request == 'DH_REQUEST':
+            log_function("\n[DH Key Exchange]")
+            log_function(f"Server private key: {hex(private_key)}")
+            log_function(f"Server public key: {hex(public_key)}")
             # 发送服务器公钥
             comm.send_message(conn, str(public_key).encode())
 

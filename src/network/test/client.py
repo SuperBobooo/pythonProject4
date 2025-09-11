@@ -1,3 +1,4 @@
+import ast
 import os
 import socket
 import hashlib
@@ -147,6 +148,141 @@ class ECCProxyClient(tk.Frame):
             self.sock.close()
 
 
+class ECC_en_Client(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master, bg="white")
+        self.server_pub = None
+        self.pack(fill="both", expand=True)
+        self.sock = None
+        self.ecc_cipher = ECCCipher()
+        self.comm = None
+        self.shared_key = None
+
+        frame_conn = ttk.LabelFrame(self, text="Connection Settings")
+        frame_conn.pack(fill="x", padx=10, pady=10)
+
+        ttk.Label(frame_conn, text="Server IP:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.entry_host = ttk.Entry(frame_conn, width=30)
+        self.entry_host.insert(0, "127.0.0.1")
+        self.entry_host.grid(row=0, column=1, padx=5, pady=5)
+
+        self.btn_connect = ttk.Button(frame_conn, text="Connect", command=self.connect_server)
+        self.btn_connect.grid(row=0, column=2, rowspan=2, padx=10)
+
+        frame_msg = ttk.LabelFrame(self, text="Messaging")
+        frame_msg.pack(fill="x", padx=10, pady=10)
+
+        self.entry_msg = ttk.Entry(frame_msg, width=60)
+        self.entry_msg.grid(row=0, column=0, padx=5, pady=5)
+
+        self.btn_send_msg = ttk.Button(frame_msg, text="Send Message", state="disabled", command=self.send_message)
+        self.btn_send_msg.grid(row=0, column=1, padx=5, pady=5)
+
+        self.btn_send_file = ttk.Button(frame_msg, text="Send File", state="disabled", command=self.send_file)
+        self.btn_send_file.grid(row=0, column=2, padx=5, pady=5)
+
+        frame_out = ttk.LabelFrame(self, text="Server Response")
+        frame_out.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.text_area = scrolledtext.ScrolledText(frame_out, wrap=tk.WORD, width=90, height=20,
+                                                   font=("Consolas", 10), bg="black", fg="lime")
+        self.text_area.pack(fill="both", expand=True)
+
+    def log(self, msg):
+        self.text_area.insert(tk.END, msg + "\n")
+        self.text_area.see(tk.END)
+
+    def connect_server(self):
+        try:
+            host = self.entry_host.get().strip()
+            self.comm = SocketCommunicator(host=host, port=SERVER_PORT)
+            self.sock = self.comm.connect_to_server()
+
+            # 发送ECC请求
+            self.comm.send_message(self.sock, b"ECC_REQUEST")
+
+            # 接收服务器公钥
+            server_pub_str = self.comm.receive_message(self.sock).decode()
+            # print(server_pub_str)
+            # x, y = map(int, server_pub_str.split(","))
+            self.server_pub = ast.literal_eval(server_pub_str)
+
+            self.btn_send_msg.config(state="normal")
+            self.btn_send_file.config(state="normal")
+            self.log("[SERVER] Connected to server.")
+            self.log(f"服务器公钥: ({hex(self.server_pub[0])}, {hex(self.server_pub[1])})")
+
+            threading.Thread(target=self.receive_data, daemon=True).start()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def send_message(self):
+        try:
+            self.comm.send_message(self.sock, b"a")
+            msg = self.entry_msg.get()
+            # 使用服务器的公钥加密消息
+            ciphertext_package = self.ecc_cipher.encrypt(msg.encode(), self.server_pub)
+            # 发送完整的密文包
+            self.comm.send_message(self.sock, str(ciphertext_package).encode())
+            self.log(f"[CLIENT] 已发送加密消息: {ciphertext_package}")
+        except Exception as e:
+            messagebox.showerror("错误", str(e))
+
+    def send_file(self):
+        try:
+            filepath = filedialog.askopenfilename()
+            if not filepath:
+                return
+
+            filename = os.path.basename(filepath)
+            filesize = os.path.getsize(filepath)
+
+            header = f"{filename}:{filesize}".encode()
+            enc_header = self.ecc_encrypt(header)
+
+            self.comm.send_message(self.sock, b"FILE")
+            self.comm.send_message(self.sock, b"ECC")
+            self.comm.send_message(self.sock, enc_header)
+
+            with open(filepath, "rb") as f:
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    enc_chunk = self.ecc_encrypt(chunk)
+                    self.comm.send_message(self.sock, enc_chunk)
+
+            self.comm.send_message(self.sock, b"EOF")
+            self.log(f"[CLIENT] File {filename} sent ({filesize} bytes)")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+
+
+    def receive_data(self):
+        try:
+            while True:
+                data = self.comm.receive_message(self.sock)
+                if not data:
+                    break
+
+                if data == b"EOF":
+                    continue
+
+                decrypted = self.ecc_decrypt(data)
+                self.log(f"[SERVER] {decrypted.decode(errors='ignore')}")
+        except Exception as e:
+            self.log(f"[ERROR] {str(e)}")
+        finally:
+            self.sock.close()
+
+    def ecc_decrypt(self, data):
+        """使用ECC派生密钥解密数据"""
+        aes_key = self.ecc_cipher.derive_key(self.shared_key)[:16]
+        aes_cipher = AESCipher(aes_key)
+        return aes_cipher.decrypt(data)
+
+
 # ===================== DH Secure =====================
 class DHSecureClient(tk.Frame):
     def __init__(self, master):
@@ -205,7 +341,7 @@ class DHSecureClient(tk.Frame):
 
             self.comm = SocketCommunicator(host=host, port=SERVER_PORT)
             self.sock = self.comm.connect_to_server()
-
+            self.comm.send_message(self.sock, b"DH_REQUEST")
             other_pub = int(self.comm.receive_message(self.sock).decode())
             self.comm.send_message(self.sock, str(pub).encode())
 
@@ -493,7 +629,12 @@ class ClientApp(tk.Tk):
         button.configure(bg="#4a90e2")
         self.active_button = button
 
-        self.show_encrypt()
+        if cipher == "AES":
+            self.show_dh()
+        elif cipher == "ECC":
+            self.show_en_ecc()
+
+        # self.show_encrypt()
 
     def clear_content(self):
         if self.current_frame:
@@ -507,6 +648,10 @@ class ClientApp(tk.Tk):
     def show_dh(self):
         self.clear_content()
         self.current_frame = DHSecureClient(self.content)
+
+    def show_en_ecc(self):
+        self.clear_content()
+        self.current_frame = ECC_en_Client(self.content)
 
     def show_encrypt(self):
         self.clear_content()

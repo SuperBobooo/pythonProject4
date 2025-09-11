@@ -1,3 +1,4 @@
+import ast
 import os
 import socket
 import hashlib
@@ -9,6 +10,7 @@ from src.algorithms.des_1 import DESCipher
 from src.algorithms.dh_1 import DHKeyExchange
 from src.algorithms.aes_1 import AESCipher
 from src.algorithms.ca_1 import CACipher  # CA 加密算法
+from src.algorithms.ecc import ECCCipher
 from src.network.socket_comm import SocketCommunicator
 
 RECEIVE_DIR = 'received_files'
@@ -34,12 +36,14 @@ def select_cipher(key, cipher_type):
 
 def run_server(log_function):
     global cipher_type
+    global ecc_cipher
     receive_dir = ensure_receive_dir()
     log_function(f"All received files will be saved to: {receive_dir}")
 
     dh = DHKeyExchange()
     private_key = dh.generate_private_key()
     public_key = dh.generate_public_key(private_key)
+    ecc_cipher = ECCCipher()
     comm = SocketCommunicator(port=12345)
     conn = comm.start_server()
 
@@ -50,20 +54,28 @@ def run_server(log_function):
         log_function("\n[DH Key Exchange]")
         log_function(f"Server private key: {hex(private_key)}")
         log_function(f"Server public key: {hex(public_key)}")
+        log_function("\n[ECC密钥交换]")
+        log_function(f"服务器私钥: {hex(ecc_cipher.private_key)}")
+        log_function(f"服务器公钥: ({hex(ecc_cipher.public_key[0])}, {hex(ecc_cipher.public_key[1])})")
 
-        # 发送服务器公钥
-        comm.send_message(conn, str(public_key).encode())
+        request = comm.receive_message(conn).decode()
+        print(request)
+        if request == 'ECC_REQUEST':
+            comm.send_message(conn,str(ecc_cipher.public_key).encode())
+        elif request == 'DH_REQUEST':
+            # 发送服务器公钥
+            comm.send_message(conn, str(public_key).encode())
 
-        # 接收客户端公钥
-        other_public_key = int(comm.receive_message(conn).decode())
-        log_function(f"Received client public key: {hex(other_public_key)}")
+            # 接收客户端公钥
+            other_public_key = int(comm.receive_message(conn).decode())
+            log_function(f"Received client public key: {hex(other_public_key)}")
 
-        # 生成共享密钥
-        shared_secret = dh.generate_shared_secret(private_key, other_public_key)
-        aes_key = dh.derive_aes_key(shared_secret)
-        log_function(f"\n[Shared Secret Established]")
-        log_function(f"Shared secret: {hex(shared_secret)}")
-        log_function(f"Derived AES key: {aes_key.hex()}")
+            # 生成共享密钥
+            shared_secret = dh.generate_shared_secret(private_key, other_public_key)
+            aes_key = dh.derive_aes_key(shared_secret)
+            log_function(f"\n[Shared Secret Established]")
+            log_function(f"Shared secret: {hex(shared_secret)}")
+            log_function(f"Derived AES key: {aes_key.hex()}")
 
         log_function("\nServer ready to receive requests...")
 
@@ -85,7 +97,10 @@ def run_server(log_function):
 
                 # 将密文显示到左侧输入框
                 app.update_input_area(encrypted.hex())
-
+            elif request == 'a':
+                cipher_type = 'ECC'
+                encrypted = comm.receive_message(conn).decode()
+                app.update_input_area(encrypted)
             elif request == 'FILE':
                 cipher_type = comm.receive_message(conn).decode()
                 cipher = select_cipher(aes_key, cipher_type)
@@ -186,34 +201,42 @@ class ServerGUI(tk.Tk):
         encrypted_message = self.input_area.get("1.0", tk.END).strip()
         if encrypted_message:
             try:
-                # 从输入框获取密文并进行解密
-                encrypted_bytes = bytes.fromhex(encrypted_message)
-
-
-                if cipher_type == 'CA':
-                    cipher = select_cipher(aes_key, 'CA')  # 使用DH交换获得的aes_key
-                    decrypted = cipher.decrypt(encrypted_bytes)
-                    decrypted_message = decrypted.decode('utf-8', errors='ignore')  # 对于无法解码的部分，忽略错误
-                elif cipher_type == 'AES':
-                    cipher = select_cipher(aes_key, 'AES')
-                    decrypted = cipher.decrypt(encrypted_bytes)
-                    decrypted_message = decrypted.decode()
-                elif cipher_type == 'DES':
-                    cipher = select_cipher(aes_key, 'DES')
-                    decrypted = cipher.decrypt(encrypted_bytes)
-                    decrypted_message = decrypted.decode()
+                if cipher_type == 'ECC':
+                    # 对于ECC，需要重建密文包
+                    try:
+                        # 尝试将字符串解析为Python元组
+                        ciphertext_package = ast.literal_eval(encrypted_message)
+                        if isinstance(ciphertext_package, tuple) and len(ciphertext_package) == 3:
+                            decrypted_message = ecc_cipher.decrypt(ciphertext_package)
+                            decrypted_message = decrypted_message.decode('utf-8', errors='ignore')
+                        else:
+                            decrypted_message = "无效的ECC密文包格式"
+                    except (ValueError, SyntaxError):
+                        decrypted_message = "无效的ECC密文格式"
                 else:
-                    decrypted_message = "Unsupported cipher"
+                    # 对于其他加密类型（AES/DES/CA）
+                    encrypted_bytes = bytes.fromhex(encrypted_message)
+                    if cipher_type == 'CA':
+                        cipher = select_cipher(aes_key, 'CA')
+                    elif cipher_type == 'AES':
+                        cipher = select_cipher(aes_key, 'AES')
+                    elif cipher_type == 'DES':
+                        cipher = select_cipher(aes_key, 'DES')
+                    else:
+                        decrypted_message = "不支持的加密类型"
+                        return
+
+                    decrypted = cipher.decrypt(encrypted_bytes)
+                    decrypted_message = decrypted.decode('utf-8', errors='ignore')
 
                 # 显示解密后的消息
                 self.input_area.delete(1.0, tk.END)
                 self.input_area.insert(tk.END, decrypted_message)
 
             except Exception as e:
-                self.log(f"Decryption failed: {e}")
+                self.log(f"解密失败: {e}")
                 self.input_area.delete(1.0, tk.END)
-                self.input_area.insert(tk.END, "Decryption failed")
-
+                self.input_area.insert(tk.END, f"解密失败: {str(e)}")
     def update_input_area(self, encrypted_message):
         """更新左侧输入框中的密文"""
         self.input_area.delete(1.0, tk.END)

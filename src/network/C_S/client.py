@@ -616,16 +616,23 @@ class NormalDe(tk.Frame):
             elif cipher_type == "RSA":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.rsa_encrypt(plaintext, public_key)
-                decrypted = CryptoUtils.rsa_decrypt(encrypted, self.key_pair[0])
-                self.log(f"[{cipher_type}] decrypted: {decrypted}")
+                self.comm.send_message(self.sock, encrypted)
+                self.comm.send_message(self.sock, self.key_pair[0])
+                # decrypted = CryptoUtils.rsa_decrypt(encrypted, self.key_pair[0])
+                # self.log(f"[{cipher_type}] decrypted: {decrypted}")
             elif cipher_type == "ElGamal":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.elgamal_encrypt(plaintext, public_key)
+                self.comm.send_message(self.sock, encrypted)
+                self.comm.send_message(self.sock, self.key_pair[0])
                 decrypted = CryptoUtils.elgamal_decrypt(encrypted, self.key_pair[0])
+
                 self.log(f"[{cipher_type}] decrypted: {decrypted}")
             elif cipher_type == "SM2":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.sm2_encrypt(plaintext, public_key)
+                self.comm.send_message(self.sock, encrypted)
+                self.comm.send_message(self.sock, self.key_pair[0])
                 decrypted = CryptoUtils.sm2_decrypt(encrypted,self.key_pair[0])
                 self.log(f"[{cipher_type}] decrypted: {decrypted}")
             elif cipher_type == "MD5":

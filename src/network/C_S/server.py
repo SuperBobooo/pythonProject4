@@ -36,6 +36,7 @@ def select_cipher(key, cipher_type):
         raise ValueError(f"Unsupported cipher type: {cipher_type}")
 
 def run_server(log_function):
+    global sK
     global cipher_type
     global ecc_cipher
     receive_dir = ensure_receive_dir()
@@ -119,6 +120,18 @@ def run_server(log_function):
                     app.update_input_area(cipher.hex())
                 elif cipher_type == "RC4":
                     cipher = comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
+                elif cipher_type == "RSA":
+                    cipher = comm.receive_message(conn)
+                    sK = comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
+                elif cipher_type == "ElGamal":
+                    cipher = comm.receive_message(conn)
+                    sK = comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
+                elif cipher_type == "SM2":
+                    cipher = comm.receive_message(conn)
+                    sK = comm.receive_message(conn)
                     app.update_input_area(cipher.hex())
             elif request == 'FILE':
                 cipher_type = comm.receive_message(conn).decode()
@@ -280,6 +293,21 @@ class ServerGUI(tk.Tk):
                             self.input_area.insert(tk.END, decrypted_message)
                         elif cipher_type == "RC4":
                             decrypted = CryptoUtils.rc4_decrypt(encrypted_bytes)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
+                        elif cipher_type == "RSA":
+                            decrypted = CryptoUtils.rsa_decrypt(encrypted_bytes,sK)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
+                        elif cipher_type == "ElGamal":
+                            decrypted = CryptoUtils.elgamal_decrypt(encrypted_bytes, sK)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
+                        elif cipher_type == "SM2":
+                            decrypted = CryptoUtils.sm2_decrypt(encrypted_bytes, sK)
                             decrypted_message = decrypted.decode('utf-8', errors='ignore')
                             self.input_area.delete(1.0, tk.END)
                             self.input_area.insert(tk.END, decrypted_message)

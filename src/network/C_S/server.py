@@ -6,6 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
+from src.algorithms.CryptoUtils import CryptoUtils
 from src.algorithms.des_1 import DESCipher
 from src.algorithms.dh_1 import DHKeyExchange
 from src.algorithms.aes_1 import AESCipher
@@ -101,6 +102,24 @@ def run_server(log_function):
                 cipher_type = 'ECC'
                 encrypted = comm.receive_message(conn).decode()
                 app.update_input_area(encrypted)
+            elif request == 'NO_REQUEST':
+                cipher_type = comm.receive_message(conn).decode()
+                log_function(cipher_type)
+                if cipher_type == "AES":
+                    cipher_type = "AES1"
+                    cipher=comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
+                elif cipher_type == "DES":
+                    cipher_type = "DES1"
+                    cipher = comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
+                elif cipher_type == "CA":
+                    cipher_type = "CA1"
+                    cipher = comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
+                elif cipher_type == "RC4":
+                    cipher = comm.receive_message(conn)
+                    app.update_input_area(cipher.hex())
             elif request == 'FILE':
                 cipher_type = comm.receive_message(conn).decode()
                 cipher = select_cipher(aes_key, cipher_type)
@@ -244,7 +263,26 @@ class ServerGUI(tk.Tk):
                     elif cipher_type == 'DES':
                         cipher = select_cipher(aes_key, 'DES')
                     else:
-                        decrypted_message = "不支持的加密类型"
+                        if cipher_type == 'AES1':
+                            decrypted = CryptoUtils.aes_decrypt(encrypted_bytes)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
+                        elif cipher_type == "DES1":
+                            decrypted = CryptoUtils.des_decrypt(encrypted_bytes)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
+                        elif cipher_type == "CA1":
+                            decrypted = CryptoUtils.caesar_decrypt(encrypted_bytes)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
+                        elif cipher_type == "RC4":
+                            decrypted = CryptoUtils.rc4_decrypt(encrypted_bytes)
+                            decrypted_message = decrypted.decode('utf-8', errors='ignore')
+                            self.input_area.delete(1.0, tk.END)
+                            self.input_area.insert(tk.END, decrypted_message)
                         return
 
                     decrypted = cipher.decrypt(encrypted_bytes)

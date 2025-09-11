@@ -382,14 +382,21 @@ class NormalDe(tk.Frame):
 
         frame_conn = ttk.LabelFrame(self, text="Encryption Settings")
         frame_conn.pack(fill="x", padx=10, pady=10)
+        frame_conn = ttk.LabelFrame(self, text="Connection Settings")
+        frame_conn.pack(fill="x", padx=10, pady=10)
 
+        ttk.Label(frame_conn, text="Server IP:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.entry_host = ttk.Entry(frame_conn, width=30)
+        self.entry_host.insert(0, "127.0.0.1")
+        self.entry_host.grid(row=0, column=1, padx=5, pady=5)
+        self.btn_connect = ttk.Button(frame_conn, text="Connect", command=self.connect_server)
+        self.btn_connect.grid(row=0, column=3, rowspan=3, padx=10)
         # 加密算法选择
-        ttk.Label(frame_conn, text="Cipher:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.cipher_type = tk.StringVar(value="AES")  # 默认值
         self.combo_cipher = ttk.Combobox(frame_conn, textvariable=self.cipher_type,
                                          values=["AES", "DES", "CA", "ElGamal", "MD5", "RC4", "RSA", "SM2"],
                                          state="readonly", width=10)
-        self.combo_cipher.grid(row=0, column=1, padx=5, pady=5)
+        self.combo_cipher.grid(row=0, column=2, padx=5, pady=5)
         self.combo_cipher.bind("<<ComboboxSelected>>", self.on_cipher_change)
         self.combo_cipher.set(a)
 
@@ -416,6 +423,31 @@ class NormalDe(tk.Frame):
         self.entry_key.bind("<Key>", self.validate_key_input)  # 添加输入验证
         # 初始化时设置密钥框状态
         self.on_cipher_change()
+    def connect_server(self):
+        try:
+            host = self.entry_host.get().strip()
+
+            self.comm = SocketCommunicator(host=host, port=SERVER_PORT)
+            self.sock = self.comm.connect_to_server()
+            self.comm.send_message(self.sock, b"NO_REQUEST")
+            self.comm.send_message(self.sock, b"NO_REQUEST")
+            threading.Thread(target=self.receive_data, daemon=True).start()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def receive_data(self):
+        try:
+            while True:
+                data = self.comm.receive_message(self.sock)
+                if not data:
+                    break
+                decrypted = self.cipher.decrypt(data)
+                self.log(f"[SERVER] {decrypted.decode(errors='ignore')}")
+        except:
+            pass
+        finally:
+            self.sock.close()
+
 
     def validate_key_input(self, event):
         """验证密钥输入"""
@@ -434,21 +466,16 @@ class NormalDe(tk.Frame):
         asymmetric_ciphers = ["RSA", "ElGamal", "SM2"]
         # 不需要密钥的算法列表
         no_key_ciphers = ["MD5"]
-
         if cipher_type in asymmetric_ciphers:
             # 非对称加密，生成密钥对并显示公钥
             threading.Thread(target=self.generate_key_pair, args=(cipher_type,), daemon=True).start()
             self.entry_key.config(state="readonly")
         elif cipher_type in no_key_ciphers:
-            # 不需要密钥的算法，禁用并清空密钥输入框
             self.entry_key.delete(0, tk.END)
             self.entry_key.config(state="disabled")
         else:
-            # 对称加密(AES/DES等)，启用密钥输入框
             self.entry_key.config(state="normal")
             self.entry_key.delete(0, tk.END)
-
-            # 为对称加密生成随机密钥示例
             if cipher_type == "AES":
                 random_key = os.urandom(16)  # AES-128需要16字节密钥
                 self.entry_key.insert(0, random_key.hex())
@@ -457,7 +484,6 @@ class NormalDe(tk.Frame):
                 self.entry_key.insert(0, random_key.hex())
 
     def set_key_entry_state(self, state):
-        """设置密钥输入框的状态"""
         self.entry_key.config(state=state)
         if state == "disabled":
             self.entry_key.unbind("<Key>")  # 禁用所有键盘输入
@@ -513,6 +539,7 @@ class NormalDe(tk.Frame):
             self.btn_encrypt.config(state="disabled")
             self.log(f"[{cipher_type}] Encrypting...")
 
+            self.comm.send_message(self.sock, cipher_type.encode())
             if cipher_type == "AES":
                 # 处理AES密钥
                 key_str = self.entry_key.get()
@@ -529,7 +556,7 @@ class NormalDe(tk.Frame):
                         return
 
                 encrypted = CryptoUtils.aes_encrypt(plaintext, key)
-
+                self.comm.send_message(self.sock, encrypted)
             elif cipher_type == "DES":
                 # 处理DES密钥
                 key_str = self.entry_key.get()
@@ -546,11 +573,12 @@ class NormalDe(tk.Frame):
                         return
 
                 encrypted = CryptoUtils.des_encrypt(plaintext, key)
+                self.comm.send_message(self.sock, encrypted)
             elif cipher_type == "CA":
                 # 凯撒加密，如果没输入shift值则使用随机值
                 key_str = self.entry_key.get()
                 encrypted = CryptoUtils.caesar_encrypt(plaintext, int(key_str))
-                decrypted = CryptoUtils.caesar_decrypt(encrypted)
+                self.comm.send_message(self.sock, encrypted)
             elif cipher_type == "RC4":
                 # 获取密钥输入（可能是字符串或十六进制）
                 key_input = self.entry_key.get()
@@ -579,9 +607,9 @@ class NormalDe(tk.Frame):
 
                     # 执行加密
                     encrypted = CryptoUtils.rc4_encrypt(plaintext, key)
-                    decrypted = CryptoUtils.rc4_decrypt(encrypted)
-                    self.log(f"[{decrypted}] Encrypted: {decrypted}")
-
+                    # decrypted = CryptoUtils.rc4_decrypt(encrypted)
+                    # self.log(f"[{decrypted}] Encrypted: {decrypted}")
+                    self.comm.send_message(self.sock, encrypted)
                 except Exception as e:
                     messagebox.showerror("加密错误", f"加密失败: {str(e)}")
                     return
@@ -909,7 +937,7 @@ class ClientApp(tk.Tk):
 
     def show_en_ecc(self):
         self.clear_content()
-        self.current_frame = ECC_en_Client(self.content,)
+        self.current_frame = ECC_en_Client(self.content)
 
     def show_encrypt(self):
         self.clear_content()

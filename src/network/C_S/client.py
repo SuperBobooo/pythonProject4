@@ -178,9 +178,6 @@ class ECC_en_Client(tk.Frame):
         self.btn_send_msg = ttk.Button(frame_msg, text="Send Message", state="disabled", command=self.send_message)
         self.btn_send_msg.grid(row=0, column=1, padx=5, pady=5)
 
-        self.btn_send_file = ttk.Button(frame_msg, text="Send File", state="disabled", command=self.send_file)
-        self.btn_send_file.grid(row=0, column=2, padx=5, pady=5)
-
         frame_out = ttk.LabelFrame(self, text="Server Response")
         frame_out.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -208,7 +205,6 @@ class ECC_en_Client(tk.Frame):
             self.server_pub = ast.literal_eval(server_pub_str)
 
             self.btn_send_msg.config(state="normal")
-            self.btn_send_file.config(state="normal")
             self.log("[SERVER] Connected to server.")
             self.log(f"服务器公钥: ({hex(self.server_pub[0])}, {hex(self.server_pub[1])})")
 
@@ -227,37 +223,6 @@ class ECC_en_Client(tk.Frame):
             self.log(f"[CLIENT] 已发送加密消息: {ciphertext_package}")
         except Exception as e:
             messagebox.showerror("错误", str(e))
-
-    def send_file(self):
-        try:
-            filepath = filedialog.askopenfilename()
-            if not filepath:
-                return
-
-            filename = os.path.basename(filepath)
-            filesize = os.path.getsize(filepath)
-
-            header = f"{filename}:{filesize}".encode()
-            enc_header = self.ecc_encrypt(header)
-
-            self.comm.send_message(self.sock, b"FILE")
-            self.comm.send_message(self.sock, b"ECC")
-            self.comm.send_message(self.sock, enc_header)
-
-            with open(filepath, "rb") as f:
-                while True:
-                    chunk = f.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    enc_chunk = self.ecc_encrypt(chunk)
-                    self.comm.send_message(self.sock, enc_chunk)
-
-            self.comm.send_message(self.sock, b"EOF")
-            self.log(f"[CLIENT] File {filename} sent ({filesize} bytes)")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-
 
     def receive_data(self):
         try:
@@ -586,6 +551,40 @@ class ClientApp(tk.Tk):
                                      command=lambda: self.set_cipher("ECC", self.btn_ecc_sub))
         self.btn_ecc_sub.pack(fill="x")
 
+        self.btn_ca = tk.Button(self.submenu, text="CA", bg="#3b4a59", fg="white",
+                                     relief="flat", anchor="w", borderwidth=0,
+                                     command=lambda: self.set_cipher("CA", self.btn_ca))
+        self.btn_ca.pack(fill="x")
+
+        self.btn_des = tk.Button(self.submenu, text="DES", bg="#3b4a59", fg="white",
+                                 relief="flat", anchor="w", borderwidth=0,
+                                 command=lambda: self.set_cipher("DES", self.btn_des))
+        self.btn_des.pack(fill="x")
+
+        self.btn_elgamal = tk.Button(self.submenu, text="ElGamal", bg="#3b4a59", fg="white",
+                                     relief="flat", anchor="w", borderwidth=0,
+                                     command=lambda: self.set_cipher("ElGamal", self.btn_elgamal))
+        self.btn_elgamal.pack(fill="x")
+
+        self.btn_md5 = tk.Button(self.submenu, text="MD5", bg="#3b4a59", fg="white",
+                                 relief="flat", anchor="w", borderwidth=0,
+                                 command=lambda: self.set_cipher("MD5", self.btn_md5))
+        self.btn_md5.pack(fill="x")
+
+        self.btn_rc4 = tk.Button(self.submenu, text="RC4", bg="#3b4a59", fg="white",
+                                 relief="flat", anchor="w", borderwidth=0,
+                                 command=lambda: self.set_cipher("RC4", self.btn_rc4))
+        self.btn_rc4.pack(fill="x")
+
+        self.btn_rsa = tk.Button(self.submenu, text="RSA", bg="#3b4a59", fg="white",
+                                 relief="flat", anchor="w", borderwidth=0,
+                                 command=lambda: self.set_cipher("RSA", self.btn_rsa))
+        self.btn_rsa.pack(fill="x")
+
+        self.btn_sm2 = tk.Button(self.submenu, text="SM2", bg="#3b4a59", fg="white",
+                                 relief="flat", anchor="w", borderwidth=0,
+                                 command=lambda: self.set_cipher("SM2", self.btn_sm2))
+        self.btn_sm2.pack(fill="x")
         self.submenu_visible = True
         self.current_frame = None
 
@@ -623,9 +622,13 @@ class ClientApp(tk.Tk):
     def set_cipher(self, cipher, button):
         self.cipher_type.set(cipher)
 
-        if self.active_button:
-            self.active_button.configure(bg="#3b4a59")
+        # 重置所有子菜单按钮颜色
+        for btn in [self.btn_aes, self.btn_ecc_sub, self.btn_ca, self.btn_des,
+                    self.btn_elgamal, self.btn_md5, self.btn_rc4,
+                    self.btn_rsa, self.btn_sm2]:
+            btn.configure(bg="#3b4a59")
 
+        # 高亮当前按钮
         button.configure(bg="#4a90e2")
         self.active_button = button
 
@@ -633,8 +636,10 @@ class ClientApp(tk.Tk):
             self.show_dh()
         elif cipher == "ECC":
             self.show_en_ecc()
-
-        # self.show_encrypt()
+        elif cipher == "CA":
+            self.show_dh()
+        elif cipher == "DES":
+            self.show_dh()
 
     def clear_content(self):
         if self.current_frame:

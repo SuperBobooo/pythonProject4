@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-DH Key Exchange (DH密钥交换) 实现
-"""
+
 import random
 from ..utils.helpers import is_prime, generate_prime, fast_power
 

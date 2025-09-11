@@ -6,6 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import scrolledtext, filedialog, messagebox, ttk
 
+from src.algorithms.CryptoUtils import CryptoUtils
 from src.algorithms.ecc_1 import ECCCipher
 from src.algorithms.dh_1 import DHKeyExchange
 from src.algorithms.ca_1 import CACipher
@@ -369,8 +370,166 @@ class DHSecureClient(tk.Frame):
         finally:
             self.sock.close()
 
+# ===================== NormalDe =====================
+class NormalDe(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master, bg="white")
+        self.pack(fill="both", expand=True)
+        self.sock = None
+        self.cipher = None
+        self.comm = None
+        self.key_pair = None  # 用于存储非对称加密的密钥对
 
+        frame_conn = ttk.LabelFrame(self, text="Encryption Settings")
+        frame_conn.pack(fill="x", padx=10, pady=10)
 
+        # 加密算法选择
+        ttk.Label(frame_conn, text="Cipher:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.cipher_type = tk.StringVar(value="AES")
+        self.combo_cipher = ttk.Combobox(frame_conn, textvariable=self.cipher_type,
+                                         values=["AES", "DES", "CA", "ElGamal", "MD5", "RC4", "RSA", "SM2"],
+                                         state="readonly", width=10)
+        self.combo_cipher.grid(row=0, column=1, padx=5, pady=5)
+        self.combo_cipher.bind("<<ComboboxSelected>>", self.on_cipher_change)
+
+        # 密钥输入框
+        ttk.Label(frame_conn, text="Key:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        self.entry_key = ttk.Entry(frame_conn, width=50)
+        self.entry_key.grid(row=1, column=1, padx=5, pady=5)
+
+        # 明文输入框
+        ttk.Label(frame_conn, text="Plaintext:").grid(row=2, column=0, sticky="w", padx=5, pady=5)
+        self.entry_plaintext = ttk.Entry(frame_conn, width=50)
+        self.entry_plaintext.grid(row=2, column=1, padx=5, pady=5)
+
+        # 操作按钮
+        self.btn_encrypt = ttk.Button(frame_conn, text="Encrypt", command=self.encrypt_data)
+        self.btn_encrypt.grid(row=0, column=2, padx=5, pady=5, rowspan=3)
+
+        frame_out = ttk.LabelFrame(self, text="Output")
+        frame_out.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.text_area = scrolledtext.ScrolledText(frame_out, wrap=tk.WORD, width=90, height=20,
+                                                   font=("Consolas", 10), bg="black", fg="lime")
+        self.text_area.pack(fill="both", expand=True)
+
+        # 初始化时设置密钥框状态
+        self.on_cipher_change()
+
+    def on_cipher_change(self, event=None):
+        """当加密算法改变时更新UI"""
+        cipher_type = self.cipher_type.get()
+
+        # 非对称加密算法列表
+        asymmetric_ciphers = ["RSA", "ElGamal", "SM2"]
+        # 不需要密钥的算法列表
+        no_key_ciphers = ["MD5", "CA"]
+
+        if cipher_type in asymmetric_ciphers:
+            # 非对称加密，生成密钥对并显示公钥
+            threading.Thread(target=self.generate_key_pair, args=(cipher_type,), daemon=True).start()
+            self.set_key_entry_state("normal")
+        elif cipher_type in no_key_ciphers:
+            # 不需要密钥的算法，禁用并清空密钥输入框
+            self.entry_key.delete(0, tk.END)
+            self.set_key_entry_state("disabled")
+        else:
+            # 对称加密，启用密钥输入框
+            self.entry_key.delete(0, tk.END)
+            self.set_key_entry_state("normal")
+
+    def set_key_entry_state(self, state):
+        """设置密钥输入框的状态"""
+        self.entry_key.config(state=state)
+        if state == "disabled":
+            self.entry_key.unbind("<Key>")  # 禁用所有键盘输入
+        else:
+            self.entry_key.bind("<Key>", lambda e: "break")  # 恢复键盘输入
+
+    def generate_key_pair(self, cipher_type):
+        """生成非对称加密的密钥对"""
+        try:
+            self.btn_encrypt.config(state="disabled")  # 生成密钥时禁用加密按钮
+            self.log(f"[{cipher_type}] Generating key pair, please wait...")
+
+            if cipher_type == "RSA":
+                private_key, public_key = CryptoUtils.generate_rsa_keypair()
+            elif cipher_type == "ElGamal":
+                private_key, public_key = CryptoUtils.generate_elgamal_keypair()
+            elif cipher_type == "SM2":
+                private_key, public_key = CryptoUtils.generate_sm2_keypair()
+            else:
+                return
+
+            self.key_pair = (private_key, public_key)
+
+            # 在日志中显示完整的密钥对
+            self.log(f"[{cipher_type}] Key Pair Generated:")
+            self.log(f"Private Key: {private_key.hex()}")
+            self.log(f"Public Key: {public_key.hex()}")
+
+            # 在密钥框中显示公钥
+            self.entry_key.delete(0, tk.END)
+            self.entry_key.insert(0, public_key.hex())
+
+        except Exception as e:
+            self.log(f"Error generating key pair: {str(e)}")
+        finally:
+            self.btn_encrypt.config(state="normal")  # 恢复加密按钮
+
+    def encrypt_data(self):
+        """加密数据"""
+        try:
+            cipher_type = self.cipher_type.get()
+            plaintext = self.entry_plaintext.get().encode()
+
+            if not plaintext:
+                self.log("Error: Plaintext cannot be empty")
+                return
+
+            self.btn_encrypt.config(state="disabled")  # 加密时禁用按钮
+            self.log(f"[{cipher_type}] Encrypting...")
+
+            if cipher_type == "AES":
+                key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                encrypted = CryptoUtils.aes_encrypt(plaintext, key)
+            elif cipher_type == "DES":
+                key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                encrypted = CryptoUtils.des_encrypt(plaintext, key)
+            elif cipher_type == "CA":
+                # 凯撒加密，如果没输入shift值则使用随机值
+                if self.entry_key.get() and self.entry_key.get().isdigit():
+                    shift = int(self.entry_key.get())
+                else:
+                    shift = None
+                encrypted = CryptoUtils.caesar_encrypt(plaintext, shift)
+            elif cipher_type == "RC4":
+                key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                encrypted = CryptoUtils.rc4_encrypt(plaintext, key)
+            elif cipher_type == "RSA":
+                public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                encrypted = CryptoUtils.rsa_encrypt(plaintext, public_key)
+            elif cipher_type == "ElGamal":
+                public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                encrypted = CryptoUtils.elgamal_encrypt(plaintext, public_key)
+            elif cipher_type == "SM2":
+                public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                encrypted = CryptoUtils.sm2_encrypt(plaintext, public_key)
+            elif cipher_type == "MD5":
+                encrypted = CryptoUtils.md5_hash(plaintext)
+            else:
+                raise ValueError("Unsupported cipher type")
+
+            self.log(f"[{cipher_type}] Encrypted Data: {encrypted.hex()}")
+
+        except Exception as e:
+            self.log(f"Encryption error: {str(e)}")
+        finally:
+            self.btn_encrypt.config(state="normal")  # 恢复加密按钮
+
+    def log(self, msg):
+        self.text_area.insert(tk.END, msg + "\n")
+        self.text_area.see(tk.END)
 # ===================== Encrypt Transfer (AES/ECC) =====================
 class EncryptTransferClient(tk.Frame):
     def __init__(self, master, cipher_type_var):
@@ -543,7 +702,7 @@ class ClientApp(tk.Tk):
 
         self.btn_aes = tk.Button(self.submenu, text="AES", bg="#3b4a59", fg="white",
                                  relief="flat", anchor="w", borderwidth=0,
-                                 command=lambda: self.set_cipher("AES", self.btn_aes))
+                                 command=lambda: self.set_cipher("AAES", self.btn_aes))
         self.btn_aes.pack(fill="x")
 
         self.btn_ecc_sub = tk.Button(self.submenu, text="ECC", bg="#3b4a59", fg="white",
@@ -558,7 +717,7 @@ class ClientApp(tk.Tk):
 
         self.btn_des = tk.Button(self.submenu, text="DES", bg="#3b4a59", fg="white",
                                  relief="flat", anchor="w", borderwidth=0,
-                                 command=lambda: self.set_cipher("DES", self.btn_des))
+                                 command=lambda: self.set_cipher("DDES", self.btn_des))
         self.btn_des.pack(fill="x")
 
         self.btn_elgamal = tk.Button(self.submenu, text="ElGamal", bg="#3b4a59", fg="white",
@@ -640,6 +799,9 @@ class ClientApp(tk.Tk):
             self.show_dh()
         elif cipher == "DES":
             self.show_dh()
+        else:
+            self.show_No()
+
 
     def clear_content(self):
         if self.current_frame:
@@ -653,6 +815,10 @@ class ClientApp(tk.Tk):
     def show_dh(self):
         self.clear_content()
         self.current_frame = DHSecureClient(self.content)
+
+    def show_No(self):
+        self.clear_content()
+        self.current_frame = NormalDe(self.content)
 
     def show_en_ecc(self):
         self.clear_content()

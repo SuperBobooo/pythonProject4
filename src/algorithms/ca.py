@@ -1,21 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-CA Stream Cipher (CA流密码) 实现
-"""
 import random
 from ..utils.helpers import generate_random_key
 
 class CACipher:
-    """CA流密码类"""
     
     def __init__(self, key: str = None, rule: int = 30):
-        """
-        初始化CA密码
-        
-        Args:
-            key: 密钥，如果为None则生成随机密钥
-            rule: CA规则，默认为30
-        """
         if key is None:
             key = generate_random_key(8)
         self.key = key
@@ -70,15 +58,6 @@ class CACipher:
         return output
     
     def encrypt(self, plaintext: str) -> str:
-        """
-        加密明文
-        
-        Args:
-            plaintext: 明文
-            
-        Returns:
-            密文（十六进制字符串）
-        """
         # 将明文转换为字节
         plaintext_bytes = plaintext.encode('utf-8')
         
@@ -112,15 +91,6 @@ class CACipher:
         return ciphertext_hex
     
     def decrypt(self, ciphertext_hex: str) -> str:
-        """
-        解密密文
-        
-        Args:
-            ciphertext_hex: 密文（十六进制字符串）
-            
-        Returns:
-            明文
-        """
         # 将十六进制字符串转换为字节
         ciphertext_bytes = []
         for i in range(0, len(ciphertext_hex), 2):

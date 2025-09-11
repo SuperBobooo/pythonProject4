@@ -61,13 +61,6 @@ class AESCipher:
         return full_ciphertext
 
     def _aes_encrypt_block(self, block):
-        """简化的AES块加密"""
-        # 实际AES实现应包括:
-        # 1. 密钥扩展
-        # 2. 初始轮密钥加
-        # 3. 9轮常规轮函数
-        # 4. 最终轮函数
-        # 这里简化为使用密钥进行异或
         encrypted = bytearray()
         for i in range(len(block)):
             encrypted.append(block[i] ^ self.key[i % len(self.key)])

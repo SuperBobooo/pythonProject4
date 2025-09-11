@@ -7,8 +7,8 @@ from tkinter import ttk, messagebox, filedialog, scrolledtext
 import threading
 import os
 import sys
-from src.network.test.server import run_server  # 导入 server.py 中的 run_server 函数
-from src.network.test.client import ClientApp
+from src.network.C_S.server import run_server  # 导入 server.py 中的 run_server 函数
+from src.network.C_S.client import ClientApp
 # 添加项目根目录到Python路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)

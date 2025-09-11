@@ -125,6 +125,7 @@ class MainWindow:
         menubar.add_cascade(label="网络", menu=network_menu)
         network_menu.add_command(label="启动服务器", command=self._start_server)
         network_menu.add_command(label="连接客户端", command=self._connect_client)
+        network_menu.add_command(label="连接代理", command=self._connect_proxy)
         network_menu.add_command(label="断开连接", command=self._disconnect)
         network_menu.add_separator()
         network_menu.add_command(label="密钥交换", command=self._key_exchange)
@@ -651,6 +652,13 @@ class MainWindow:
         """启动服务器并打开客户端窗口"""
         try:
             subprocess.Popen("python ../../src/network/C_S/client.py")
+        except Exception as e:
+            messagebox.showerror("错误", f"启动服务器失败: {e}")
+    def _connect_proxy(self):
+        """启动服务器并打开客户端窗口"""
+        try:
+            os.popen("python ../../src/network/C_S/shutd_proxy.py")
+            subprocess.Popen("python ../../src/network/C_S/proxy.py")
         except Exception as e:
             messagebox.showerror("错误", f"启动服务器失败: {e}")
 

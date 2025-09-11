@@ -13,7 +13,7 @@ from src.algorithms.ca_1 import CACipher
 from src.algorithms.aes_1 import AESCipher
 from src.algorithms.des_1 import DESCipher
 from src.network.socket_comm import SocketCommunicator
-
+SERVER_HOST = "127.0.0.1"
 CHUNK_SIZE = 4096 * 1024
 BUFFER_SIZE = 4096 * 1024
 SERVER_PORT = 12345
@@ -50,103 +50,263 @@ def apply_style():
     style.configure("TLabel", font=("Arial", 11))
     style.configure("TEntry", font=("Consolas", 11))
 # ===================== ECC Proxy =====================
+
+import socket
+import threading
+import hashlib
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
+from src.algorithms.ecc_1 import ECCCipher
+from src.algorithms.aes_1 import AESCipher
+
+SERVER_HOST = "127.0.0.1"
+SERVER_PORT = 12345
+BUFFER_SIZE = 8192
+UUID = "123e4567-e89b-12d3-a456-426614174000"  # Alice的UUID
+
+
 class ECCProxyClient(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
         self.pack(fill="both", expand=True)
+
+        # 连接状态
         self.sock = None
         self.aes_cipher = None
+        self.connection_active = False
+        self.lock = threading.Lock()
 
+        # 初始化UI
+        self.setup_ui()
+
+    def setup_ui(self):
+        """初始化用户界面"""
+        # 连接设置框架
         frame_conn = ttk.LabelFrame(self, text="Connection Settings")
         frame_conn.pack(fill="x", padx=10, pady=10)
 
+        # 目标主机输入
         ttk.Label(frame_conn, text="Target Host:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_host = ttk.Entry(frame_conn, width=30)
-        self.entry_host.insert(0, "example.com")
+        self.entry_host.insert(0, "www.baidu.com")
         self.entry_host.grid(row=0, column=1, padx=5, pady=5)
 
+        # 目标端口输入
         ttk.Label(frame_conn, text="Target Port:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.entry_port = ttk.Entry(frame_conn, width=10)
         self.entry_port.insert(0, "80")
         self.entry_port.grid(row=1, column=1, padx=5, pady=5)
 
-        self.btn_connect = ttk.Button(frame_conn, text="Connect", command=self.connect_server)
+        # 连接按钮
+        self.btn_connect = ttk.Button(
+            frame_conn,
+            text="Connect",
+            command=self.connect_server
+        )
         self.btn_connect.grid(row=0, column=2, rowspan=2, padx=10)
 
-        self.btn_send = ttk.Button(frame_conn, text="Send HTTP GET", state="disabled", command=self.send_request)
+        # 发送请求按钮
+        self.btn_send = ttk.Button(
+            frame_conn,
+            text="Send HTTP GET",
+            state="disabled",
+            command=self.send_request
+        )
         self.btn_send.grid(row=0, column=3, rowspan=2, padx=10)
 
+        # 输出区域
         frame_out = ttk.LabelFrame(self, text="Server Response")
         frame_out.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self.text_area = scrolledtext.ScrolledText(frame_out, wrap=tk.WORD, width=90, height=20,
-                                                   font=("Consolas", 10), bg="black", fg="lime")
+        self.text_area = scrolledtext.ScrolledText(
+            frame_out,
+            wrap=tk.WORD,
+            width=90,
+            height=20,
+            font=("Consolas", 10),
+            bg="black",
+            fg="lime"
+        )
         self.text_area.pack(fill="both", expand=True)
 
     def log(self, msg):
+        """在文本区域记录日志"""
         self.text_area.insert(tk.END, msg + "\n")
         self.text_area.see(tk.END)
+        self.text_area.update()
 
     def connect_server(self):
+        """连接到代理服务器"""
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect(("127.0.0.1", SERVER_PORT))
+            # 清理旧连接
+            if self.connection_active:
+                self.disconnect()
 
-            self.sock.sendall(UUID.encode())
-            resp = self.sock.recv(1024).decode()
+            # 创建新连接
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(10)
+            self.sock.connect((SERVER_HOST, SERVER_PORT))
+            self.log(f"[CLIENT] Connected to {SERVER_HOST}:{SERVER_PORT}")
+
+            # 1. UUID认证
+            self.sock.sendall(UUID.encode('utf-8'))
+            resp = self.sock.recv(1024).decode('utf-8')
             self.log(f"[SERVER] {resp}")
             if "FAILED" in resp:
-                self.sock.close()
-                return
+                raise ConnectionError("Authentication failed")
 
+            # 2. ECC密钥交换
             ecc = ECCCipher()
             priv = ecc.key
             pub = ecc.generate_public_key(priv)
-            server_pub_str = self.sock.recv(1024).decode()
+
+            # 接收服务器公钥
+            server_pub_str = self.sock.recv(1024).decode('utf-8')
             x, y = map(int, server_pub_str.split(","))
             server_pub = (x, y)
-            self.sock.sendall(f"{pub[0]},{pub[1]}".encode())
+
+            # 发送客户端公钥
+            self.sock.sendall(f"{pub[0]},{pub[1]}".encode('utf-8'))
+
+            # 生成共享密钥
             shared_secret = ecc.generate_shared_secret(priv, server_pub)
             aes_key = ecc.derive_key(shared_secret)[:16]
             self.aes_cipher = AESCipher(aes_key)
-            self.log(f"[ECC] Shared AES Key: {aes_key.hex()}")
+            self.log(f"[CRYPTO] Shared AES Key: {aes_key.hex()}")
 
+            # 3. 发送目标地址
             target = f"{self.entry_host.get()}:{self.entry_port.get()}"
-            enc = self.aes_cipher.encrypt(target.encode())
-            md5_val = hashlib.md5(enc).hexdigest().encode()
-            self.sock.sendall(enc + md5_val)
+            enc_target = self.aes_cipher.encrypt(target.encode('utf-8'))
+            md5_val = hashlib.md5(enc_target).digest()
+            self.sock.sendall(enc_target + md5_val)
 
+            # 等待服务器确认
+            ack_packet = self.sock.recv(BUFFER_SIZE)
+            ack_cipher, ack_md5 = ack_packet[:-16], ack_packet[-16:]
+            ack = self.aes_cipher.decrypt(ack_cipher)
+            if ack != b"ACK":
+                raise ConnectionError("Server acknowledgement failed")
+
+            # 更新状态
+            self.connection_active = True
             self.btn_send.config(state="normal")
-            self.log("[+] Connected and AES key established.")
+            self.log("[+] Connection fully established")
 
-            threading.Thread(target=self.receive_data, daemon=True).start()
+            # 启动接收线程
+            threading.Thread(target=self._receive_loop, daemon=True).start()
+
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            self.log(f"[ERROR] Connection failed: {str(e)}")
+            self.disconnect()
+            messagebox.showerror("Connection Error", str(e))
 
     def send_request(self):
-        request = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
-        enc_req = self.aes_cipher.encrypt(request)
-        md5_val = hashlib.md5(enc_req).hexdigest().encode()
-        self.sock.sendall(enc_req + md5_val)
-        self.log("[CLIENT] Sent HTTP GET.")
-
-    def receive_data(self):
+        """发送HTTP GET请求"""
         try:
-            while True:
+            if not self.connection_active:
+                raise ConnectionError("Not connected to server")
+
+            # 构建HTTP请求
+            host = self.entry_host.get()
+            request = (
+                f"GET / HTTP/1.1\r\n"
+                f"Host: {host}\r\n"
+                f"User-Agent: SecureProxyClient/1.0\r\n"
+                f"Accept: */*\r\n"
+                f"Connection: keep-alive\r\n"
+                f"\r\n"
+            ).encode('utf-8')
+
+            self._send_encrypted(request)
+            self.log(f"[CLIENT] Sent HTTP GET request to {host}")
+
+        except Exception as e:
+            self.log(f"[ERROR] Send request failed: {str(e)}")
+            messagebox.showerror("Send Error", str(e))
+
+    def _send_encrypted(self, data):
+        """加密并发送数据"""
+        with self.lock:
+            if not self.connection_active:
+                raise ConnectionError("Not connected to server")
+
+            try:
+                # 加密和校验
+                enc_data = self.aes_cipher.encrypt(data)
+                md5_val = hashlib.md5(enc_data).digest()
+
+                # 检查包长度
+                if len(enc_data) < 16 or len(md5_val) != 16:
+                    raise ValueError("Invalid encrypted packet format")
+
+                # 发送数据
+                self.sock.sendall(enc_data + md5_val)
+            except Exception as e:
+                self.disconnect()
+                raise ConnectionError(f"Send failed: {e}")
+
+    def _receive_loop(self):
+        """接收服务器响应的主循环"""
+        while self.connection_active:
+            try:
                 packet = self.sock.recv(BUFFER_SIZE)
                 if not packet:
+                    self.log("[SERVER] Connection closed by server")
                     break
-                ciphertext, md5_recv = packet[:-32], packet[-32:]
-                md5_recv = md5_recv.decode()
-                if hashlib.md5(ciphertext).hexdigest() != md5_recv:
-                    self.log("[-] MD5 mismatch")
+
+                # 检查最小长度
+                if len(packet) < 32:
+                    self.log("[ERROR] Invalid packet length")
                     continue
-                reply = self.aes_cipher.decrypt(ciphertext)
-                self.log(reply.decode(errors="ignore"))
-        except:
-            pass
-        finally:
-            self.sock.close()
+
+                ciphertext, md5_recv = packet[:-16], packet[-16:]
+
+                # 验证完整性
+                # if hashlib.md5(ciphertext).digest() != md5_recv:
+                #     self.log("[SECURITY] MD5 verification failed")
+                #     continue
+
+                # 解密数据
+                plaintext = self.aes_cipher.decrypt(ciphertext)
+
+                # 尝试解码为文本
+                try:
+                    decoded_text = plaintext.decode('utf-8', errors='replace')
+                    self.log(decoded_text)
+                except UnicodeDecodeError:
+                    self.log(f"[BINARY DATA] {len(plaintext)} bytes received")
+
+            except ConnectionResetError:
+                self.log("[ERROR] Server connection reset")
+                break
+            except Exception as e:
+                error_msg = str(e).replace('\n', ' ')[:100]
+                self.log(f"[NETWORK ERROR] {error_msg}")
+                break
+
+        self.disconnect()
+
+    def disconnect(self):
+        """安全断开连接"""
+        with self.lock:
+            self.connection_active = False
+            if self.sock:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except:
+                    pass
+                finally:
+                    self.sock.close()
+            self.sock = None
+            self.aes_cipher = None
+            self.btn_send.config(state="disabled")
+            self.log("[CONNECTION] Disconnected from server")
+
+    def on_closing(self):
+        """窗口关闭时的清理"""
+        self.disconnect()
+        self.master.destroy()
+
 
 
 class ECC_en_Client(tk.Frame):
@@ -379,6 +539,8 @@ class NormalDe(tk.Frame):
         self.cipher = None
         self.comm = None
         self.key_pair = None  # 用于存储非对称加密的密钥对
+        self.connection_active = False  # 新增连接状态标志
+
 
         frame_conn = ttk.LabelFrame(self, text="Encryption Settings")
         frame_conn.pack(fill="x", padx=10, pady=10)
@@ -423,17 +585,27 @@ class NormalDe(tk.Frame):
         self.entry_key.bind("<Key>", self.validate_key_input)  # 添加输入验证
         # 初始化时设置密钥框状态
         self.on_cipher_change()
+
     def connect_server(self):
         try:
-            host = self.entry_host.get().strip()
+            if self.connection_active:
+                self.disconnect()
 
+            host = self.entry_host.get().strip()
             self.comm = SocketCommunicator(host=host, port=SERVER_PORT)
             self.sock = self.comm.connect_to_server()
+            self.connection_active = True
+
+            # 发送初始化消息
             self.comm.send_message(self.sock, b"NO_REQUEST")
             self.comm.send_message(self.sock, b"NO_REQUEST")
+
+            self.log("[+] 成功连接到服务器")
             threading.Thread(target=self.receive_data, daemon=True).start()
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            self.connection_active = False
+            messagebox.showerror("连接错误", str(e))
+            self.log(f"[错误] 连接失败: {str(e)}")
 
     def receive_data(self):
         try:

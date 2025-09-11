@@ -1,7 +1,7 @@
 import socket
 import threading
 import hashlib
-from src.algorithms.ecc import ECCCipher
+from src.algorithms.ecc_1 import ECCCipher
 from src.algorithms.aes_1 import AESCipher   # 使用AES
 
 HOST = "0.0.0.0"

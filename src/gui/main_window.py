@@ -601,7 +601,7 @@ class MainWindow:
                         cipher.set_private_key(private_key)
                         return cipher.decrypt(data)
                 elif algorithm == 'ecc':
-                    from src.algorithms.ecc import ECCCipher
+                    from src.algorithms.ecc_1 import ECCCipher
                     cipher = ECCCipher()
                     if operation == 'encrypt' and public_key:
                         cipher.set_public_key(public_key)

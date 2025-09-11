@@ -10,7 +10,7 @@ from src.algorithms.des_1 import DESCipher
 from src.algorithms.dh_1 import DHKeyExchange
 from src.algorithms.aes_1 import AESCipher
 from src.algorithms.ca_1 import CACipher  # CA 加密算法
-from src.algorithms.ecc import ECCCipher
+from src.algorithms.ecc_1 import ECCCipher
 from src.network.socket_comm import SocketCommunicator
 
 RECEIVE_DIR = 'received_files'

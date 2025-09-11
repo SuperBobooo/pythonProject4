@@ -6,7 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import scrolledtext, filedialog, messagebox, ttk
 
-from src.algorithms.ecc import ECCCipher
+from src.algorithms.ecc_1 import ECCCipher
 from src.algorithms.dh_1 import DHKeyExchange
 from src.algorithms.ca_1 import CACipher
 from src.algorithms.aes_1 import AESCipher

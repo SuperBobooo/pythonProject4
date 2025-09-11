@@ -385,12 +385,13 @@ class NormalDe(tk.Frame):
 
         # 加密算法选择
         ttk.Label(frame_conn, text="Cipher:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        self.cipher_type = tk.StringVar(value="AES")
+        self.cipher_type = tk.StringVar(value="AES")  # 默认值
         self.combo_cipher = ttk.Combobox(frame_conn, textvariable=self.cipher_type,
                                          values=["AES", "DES", "CA", "ElGamal", "MD5", "RC4", "RSA", "SM2"],
                                          state="readonly", width=10)
         self.combo_cipher.grid(row=0, column=1, padx=5, pady=5)
         self.combo_cipher.bind("<<ComboboxSelected>>", self.on_cipher_change)
+        self.combo_cipher.set(a)
 
         # 密钥输入框
         ttk.Label(frame_conn, text="Key:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
@@ -412,9 +413,18 @@ class NormalDe(tk.Frame):
         self.text_area = scrolledtext.ScrolledText(frame_out, wrap=tk.WORD, width=90, height=20,
                                                    font=("Consolas", 10), bg="black", fg="lime")
         self.text_area.pack(fill="both", expand=True)
-
+        self.entry_key.bind("<Key>", self.validate_key_input)  # 添加输入验证
         # 初始化时设置密钥框状态
         self.on_cipher_change()
+
+    def validate_key_input(self, event):
+        """验证密钥输入"""
+        cipher_type = self.cipher_type.get()
+        if cipher_type in ["AES", "DES", "CA"]:
+            # 允许所有键盘输入
+            return
+        # 对其他加密类型不做限制
+        return
 
     def on_cipher_change(self, event=None):
         """当加密算法改变时更新UI"""
@@ -423,20 +433,28 @@ class NormalDe(tk.Frame):
         # 非对称加密算法列表
         asymmetric_ciphers = ["RSA", "ElGamal", "SM2"]
         # 不需要密钥的算法列表
-        no_key_ciphers = ["MD5", "CA"]
+        no_key_ciphers = ["MD5"]
 
         if cipher_type in asymmetric_ciphers:
             # 非对称加密，生成密钥对并显示公钥
             threading.Thread(target=self.generate_key_pair, args=(cipher_type,), daemon=True).start()
-            self.set_key_entry_state("normal")
+            self.entry_key.config(state="readonly")
         elif cipher_type in no_key_ciphers:
             # 不需要密钥的算法，禁用并清空密钥输入框
             self.entry_key.delete(0, tk.END)
-            self.set_key_entry_state("disabled")
+            self.entry_key.config(state="disabled")
         else:
-            # 对称加密，启用密钥输入框
+            # 对称加密(AES/DES等)，启用密钥输入框
+            self.entry_key.config(state="normal")
             self.entry_key.delete(0, tk.END)
-            self.set_key_entry_state("normal")
+
+            # 为对称加密生成随机密钥示例
+            if cipher_type == "AES":
+                random_key = os.urandom(16)  # AES-128需要16字节密钥
+                self.entry_key.insert(0, random_key.hex())
+            elif cipher_type == "DES":
+                random_key = os.urandom(8)  # DES需要8字节密钥
+                self.entry_key.insert(0, random_key.hex())
 
     def set_key_entry_state(self, state):
         """设置密钥输入框的状态"""
@@ -447,11 +465,11 @@ class NormalDe(tk.Frame):
             self.entry_key.bind("<Key>", lambda e: "break")  # 恢复键盘输入
 
     def generate_key_pair(self, cipher_type):
-        """生成非对称加密的密钥对"""
         try:
-            self.btn_encrypt.config(state="disabled")  # 生成密钥时禁用加密按钮
-            self.log(f"[{cipher_type}] Generating key pair, please wait...")
+            self.btn_encrypt.config(state="disabled")
+            self.log(f"[{cipher_type}] Generating key pair...")
 
+            # 生成密钥对（假设已确认这部分工作正常）
             if cipher_type == "RSA":
                 private_key, public_key = CryptoUtils.generate_rsa_keypair()
             elif cipher_type == "ElGamal":
@@ -463,19 +481,24 @@ class NormalDe(tk.Frame):
 
             self.key_pair = (private_key, public_key)
 
-            # 在日志中显示完整的密钥对
+            # 在主线程更新 UI
+            self.after(0, self._display_public_key, public_key.hex())  # 关键修复！
             self.log(f"[{cipher_type}] Key Pair Generated:")
             self.log(f"Private Key: {private_key.hex()}")
             self.log(f"Public Key: {public_key.hex()}")
 
-            # 在密钥框中显示公钥
-            self.entry_key.delete(0, tk.END)
-            self.entry_key.insert(0, public_key.hex())
-
         except Exception as e:
-            self.log(f"Error generating key pair: {str(e)}")
+            self.log(f"密钥生成失败: {str(e)}")
+            self.after(0, lambda: self.entry_key.config(state="normal"))  # 失败时恢复输入框
         finally:
-            self.btn_encrypt.config(state="normal")  # 恢复加密按钮
+            self.btn_encrypt.config(state="normal")
+
+    def _display_public_key(self, public_key_hex):
+        """专用方法：在主线程安全地显示公钥"""
+        self.entry_key.config(state="normal")  # 临时解除只读
+        self.entry_key.delete(0, tk.END)
+        self.entry_key.insert(0, public_key_hex)
+        self.entry_key.config(state="readonly")  # 重新设为只读
 
     def encrypt_data(self):
         """加密数据"""
@@ -487,34 +510,96 @@ class NormalDe(tk.Frame):
                 self.log("Error: Plaintext cannot be empty")
                 return
 
-            self.btn_encrypt.config(state="disabled")  # 加密时禁用按钮
+            self.btn_encrypt.config(state="disabled")
             self.log(f"[{cipher_type}] Encrypting...")
 
             if cipher_type == "AES":
-                key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                # 处理AES密钥
+                key_str = self.entry_key.get()
+                if not key_str:
+                    key = os.urandom(16)  # 生成随机AES密钥
+                    self.entry_key.insert(0, key.hex())
+                else:
+                    try:
+                        key = bytes.fromhex(key_str)
+                        if len(key) not in (16, 24, 32):  # AES支持128/192/256位
+                            raise ValueError("AES key must be 16, 24 or 32 bytes")
+                    except ValueError:
+                        self.log("Invalid AES key - must be hex string of 32, 48 or 64 chars")
+                        return
+
                 encrypted = CryptoUtils.aes_encrypt(plaintext, key)
+
             elif cipher_type == "DES":
-                key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
+                # 处理DES密钥
+                key_str = self.entry_key.get()
+                if not key_str:
+                    key = os.urandom(8)  # 生成随机DES密钥
+                    self.entry_key.insert(0, key.hex())
+                else:
+                    try:
+                        key = bytes.fromhex(key_str)
+                        if len(key) != 8:
+                            raise ValueError("DES key must be 8 bytes")
+                    except ValueError:
+                        self.log("Invalid DES key - must be hex string of 16 chars")
+                        return
+
                 encrypted = CryptoUtils.des_encrypt(plaintext, key)
             elif cipher_type == "CA":
                 # 凯撒加密，如果没输入shift值则使用随机值
-                if self.entry_key.get() and self.entry_key.get().isdigit():
-                    shift = int(self.entry_key.get())
-                else:
-                    shift = None
-                encrypted = CryptoUtils.caesar_encrypt(plaintext, shift)
+                key_str = self.entry_key.get()
+                encrypted = CryptoUtils.caesar_encrypt(plaintext, int(key_str))
+                decrypted = CryptoUtils.caesar_decrypt(encrypted)
             elif cipher_type == "RC4":
-                key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
-                encrypted = CryptoUtils.rc4_encrypt(plaintext, key)
+                # 获取密钥输入（可能是字符串或十六进制）
+                key_input = self.entry_key.get()
+
+                try:
+                    if key_input:
+                        # 先尝试直接作为字符串密钥使用
+                        try:
+                            key = key_input.encode('utf-8')  # 将字符串转换为字节
+
+                            # 如果输入看起来像十六进制（仅包含0-9a-fA-F且长度为偶数）
+                            if all(c in '0123456789abcdefABCDEF' for c in key_input) and len(key_input) % 2 == 0:
+                                # 尝试作为十六进制解析
+                                key = bytes.fromhex(key_input)
+
+                            # 密钥长度检查（RC4建议至少16字节/128位）
+                            if len(key) < 16:
+                                messagebox.showwarning("弱密钥",
+                                                       f"RC4密钥建议至少16字节(128位)，当前仅{len(key)}字节\n"
+                                                       f"输入的密钥将被直接使用：{key_input}")
+                        except ValueError:
+                            # 如果十六进制转换失败，直接使用字符串编码
+                            key = key_input.encode('utf-8')
+                    else:
+                        key = None  # 自动生成安全密钥
+
+                    # 执行加密
+                    encrypted = CryptoUtils.rc4_encrypt(plaintext, key)
+                    decrypted = CryptoUtils.rc4_decrypt(encrypted)
+                    self.log(f"[{decrypted}] Encrypted: {decrypted}")
+
+                except Exception as e:
+                    messagebox.showerror("加密错误", f"加密失败: {str(e)}")
+                    return
             elif cipher_type == "RSA":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.rsa_encrypt(plaintext, public_key)
+                decrypted = CryptoUtils.rsa_decrypt(encrypted, self.key_pair[0])
+                self.log(f"[{cipher_type}] decrypted: {decrypted}")
             elif cipher_type == "ElGamal":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.elgamal_encrypt(plaintext, public_key)
+                decrypted = CryptoUtils.elgamal_decrypt(encrypted, self.key_pair[0])
+                self.log(f"[{cipher_type}] decrypted: {decrypted}")
             elif cipher_type == "SM2":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.sm2_encrypt(plaintext, public_key)
+                decrypted = CryptoUtils.sm2_decrypt(encrypted,self.key_pair[0])
+                self.log(f"[{cipher_type}] decrypted: {decrypted}")
             elif cipher_type == "MD5":
                 encrypted = CryptoUtils.md5_hash(plaintext)
             else:
@@ -657,9 +742,10 @@ class EncryptTransferClient(tk.Frame):
             aes = AESCipher(key)
             return aes.encrypt(data)
 
-
+global a
 # ===================== 主窗口 =====================
 class ClientApp(tk.Tk):
+
     def __init__(self):
         super().__init__()
         self.title("Secure Client (ECC + DH + Encrypt)")
@@ -717,7 +803,7 @@ class ClientApp(tk.Tk):
 
         self.btn_des = tk.Button(self.submenu, text="DES", bg="#3b4a59", fg="white",
                                  relief="flat", anchor="w", borderwidth=0,
-                                 command=lambda: self.set_cipher("DDES", self.btn_des))
+                                 command=lambda: self.set_cipher("DES", self.btn_des))
         self.btn_des.pack(fill="x")
 
         self.btn_elgamal = tk.Button(self.submenu, text="ElGamal", bg="#3b4a59", fg="white",
@@ -749,6 +835,7 @@ class ClientApp(tk.Tk):
 
         # 默认高亮 AES
         self.set_cipher("AES", self.btn_aes)
+
 
     def set_active(self, button, mode):
         # 取消上一个按钮高亮
@@ -795,11 +882,11 @@ class ClientApp(tk.Tk):
             self.show_dh()
         elif cipher == "ECC":
             self.show_en_ecc()
-        elif cipher == "CA":
-            self.show_dh()
-        elif cipher == "DES":
-            self.show_dh()
         else:
+            global a
+            a=cipher
+            if cipher == "AAES":
+                a="AES"
             self.show_No()
 
 
@@ -822,7 +909,7 @@ class ClientApp(tk.Tk):
 
     def show_en_ecc(self):
         self.clear_content()
-        self.current_frame = ECC_en_Client(self.content)
+        self.current_frame = ECC_en_Client(self.content,)
 
     def show_encrypt(self):
         self.clear_content()

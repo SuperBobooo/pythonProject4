@@ -9,14 +9,10 @@ from Crypto.Util.number import bytes_to_long, long_to_bytes, getRandomRange
 from Cryptodome.Cipher import PKCS1_OAEP
 from Cryptodome.Util.number import getStrongPrime
 from typing import Tuple, Union
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-import os
-
+from cryptography.hazmat.backends import default_backend
 
 class SM2Utils:
     # SM2 参数 (使用secp256r1曲线，实际SM2使用特定参数)
@@ -25,13 +21,9 @@ class SM2Utils:
     @staticmethod
     def generate_keypair():
         """生成SM2密钥对"""
-        # 生成私钥
         private_key = ec.generate_private_key(SM2Utils.CURVE)
-
-        # 获取公钥
         public_key = private_key.public_key()
 
-        # 序列化为字节
         priv_bytes = private_key.private_numbers().private_value.to_bytes(32, 'big')
         pub_bytes = public_key.public_bytes(
             encoding=serialization.Encoding.X962,
@@ -43,19 +35,14 @@ class SM2Utils:
     @staticmethod
     def encrypt(data: bytes, public_key_bytes: bytes):
         """SM2加密"""
-        # 反序列化公钥
         public_key = ec.EllipticCurvePublicKey.from_encoded_point(
             SM2Utils.CURVE, public_key_bytes
         )
 
-        # 生成临时密钥对
         ephemeral_private = ec.generate_private_key(SM2Utils.CURVE)
         ephemeral_public = ephemeral_private.public_key()
 
-        # 计算共享密钥
         shared_key = ephemeral_private.exchange(ec.ECDH(), public_key)
-
-        # 派生加密密钥
         derived_key = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
@@ -63,44 +50,35 @@ class SM2Utils:
             info=b'sm2 encryption',
         ).derive(shared_key)
 
-        # AES加密数据
         iv = os.urandom(16)
         cipher = AES.new(derived_key, AES.MODE_CBC, iv)
         ciphertext = cipher.encrypt(pad(data, AES.block_size))
 
-        # 序列化临时公钥
         ephemeral_pub_bytes = ephemeral_public.public_bytes(
             encoding=serialization.Encoding.X962,
             format=serialization.PublicFormat.UncompressedPoint
         )
 
-        # 返回加密结果 (临时公钥 + IV + 密文)
         return ephemeral_pub_bytes + iv + ciphertext
 
     @staticmethod
     def decrypt(encrypted_data: bytes, private_key_bytes: bytes):
         """SM2解密"""
-        # 反序列化私钥
         private_key = ec.derive_private_key(
             int.from_bytes(private_key_bytes, 'big'),
             SM2Utils.CURVE
         )
 
-        # 解析加密数据
-        pub_len = 65  # 未压缩点长度
+        pub_len = 65
         ephemeral_pub_bytes = encrypted_data[:pub_len]
         iv = encrypted_data[pub_len:pub_len + 16]
         ciphertext = encrypted_data[pub_len + 16:]
 
-        # 反序列化临时公钥
         ephemeral_public = ec.EllipticCurvePublicKey.from_encoded_point(
             SM2Utils.CURVE, ephemeral_pub_bytes
         )
 
-        # 计算共享密钥
         shared_key = private_key.exchange(ec.ECDH(), ephemeral_public)
-
-        # 派生加密密钥
         derived_key = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
@@ -108,9 +86,11 @@ class SM2Utils:
             info=b'sm2 encryption',
         ).derive(shared_key)
 
-        # AES解密数据
         cipher = AES.new(derived_key, AES.MODE_CBC, iv)
         return unpad(cipher.decrypt(ciphertext), AES.block_size)
+
+
+
 class CryptoUtils:
     """
     加密工具库，支持多种加密算法
@@ -212,94 +192,77 @@ class CryptoUtils:
         return unpad(cipher.decrypt(ciphertext), DES.block_size)
 
     # ------------------ 非对称加密 ------------------
-
     @staticmethod
     def generate_rsa_keypair(key_size: int = 2048) -> Tuple[bytes, bytes]:
-        """
-        生成RSA密钥对
-        :param key_size: 密钥大小
-        :return: (私钥, 公钥)
-        """
-        key = RSA.generate(key_size)
-        private_key = key.export_key()
-        public_key = key.publickey().export_key()
-        return private_key, public_key
+        """使用cryptography库生成RSA密钥对"""
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=key_size,
+            backend=default_backend()
+        )
+        public_key = private_key.public_key()
+
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+        public_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+
+        return private_pem, public_pem
 
     @staticmethod
-    def rsa_encrypt(data: bytes, public_key: bytes = None) -> bytes:
-        """
-        RSA加密
-        :param data: 要加密的数据
-        :param public_key: 公钥，None则自动生成
-        :return: 包含所有解密参数的bytes
-        """
-        if public_key is None:
-            private_key, public_key = CryptoUtils.generate_rsa_keypair()
-        else:
-            private_key = None
+    def rsa_encrypt(data: bytes, public_key_pem: bytes) -> bytes:
+        """使用cryptography库进行RSA加密"""
+        public_key = serialization.load_pem_public_key(
+            public_key_pem,
+            backend=default_backend()
+        )
 
-        rsa_key = RSA.import_key(public_key)
-        cipher = PKCS1_OAEP.new(rsa_key)
+        ciphertext = public_key.encrypt(
+            data,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
 
-        # RSA有长度限制，需要分块加密
-        chunk_size = (rsa_key.size_in_bytes() // 8) - 42
-        encrypted_chunks = []
-        for i in range(0, len(data), chunk_size):
-            chunk = data[i:i + chunk_size]
-            encrypted_chunks.append(cipher.encrypt(chunk))
-
-        encrypted = b''.join(encrypted_chunks)
-
-        # 打包: 版本(1)|公钥长度(2)|私钥长度(2)|公钥|私钥|密文
+        # 打包格式：版本(1)|公钥长度(2)|密文
         version = b'\x01'
-        pub_len = len(public_key).to_bytes(2, 'big')
-        priv_len = len(private_key).to_bytes(2, 'big') if private_key else b'\x00\x00'
-
-        result = version + pub_len + priv_len + public_key
-        if private_key:
-            result += private_key
-        result += encrypted
-
-        return result
+        pub_len = len(public_key_pem).to_bytes(2, 'big')
+        return version + pub_len + public_key_pem + ciphertext
 
     @staticmethod
-    def rsa_decrypt(encrypted_data: bytes) -> bytes:
-        """
-        RSA解密
-        :param encrypted_data: 加密后的数据(包含所有参数)
-        :return: 原始数据
-        """
-        version = encrypted_data[0]
+    def rsa_decrypt(ciphertext: bytes, private_key_pem: bytes) -> bytes:
+        """使用cryptography库进行RSA解密"""
+        private_key = serialization.load_pem_private_key(
+            private_key_pem,
+            password=None,
+            backend=default_backend()
+        )
+
+        # 解析加密数据
+        version = ciphertext[0]
         if version != 1:
             raise ValueError("Unsupported RSA encrypted data version")
 
-        pos = 1
-        pub_len = int.from_bytes(encrypted_data[pos:pos + 2], 'big')
-        pos += 2
-        priv_len = int.from_bytes(encrypted_data[pos:pos + 2], 'big')
-        pos += 2
+        pub_len = int.from_bytes(ciphertext[1:3], 'big')
+        public_key_pem = ciphertext[3:3 + pub_len]
+        encrypted_data = ciphertext[3 + pub_len:]
 
-        public_key = encrypted_data[pos:pos + pub_len]
-        pos += pub_len
-        private_key = encrypted_data[pos:pos + priv_len] if priv_len > 0 else None
-        pos += priv_len
-        ciphertext = encrypted_data[pos:]
-
-        if private_key is None:
-            raise ValueError("Private key not found in encrypted data")
-
-        rsa_key = RSA.import_key(private_key)
-        cipher = PKCS1_OAEP.new(rsa_key)
-
-        # 分块解密
-        chunk_size = rsa_key.size_in_bytes()
-        decrypted_chunks = []
-        for i in range(0, len(ciphertext), chunk_size):
-            chunk = ciphertext[i:i + chunk_size]
-            decrypted_chunks.append(cipher.decrypt(chunk))
-
-        return b''.join(decrypted_chunks)
-
+        plaintext = private_key.decrypt(
+            encrypted_data,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        return plaintext
     @staticmethod
     def generate_elgamal_keypair(key_size: int = 1024) -> Tuple[bytes, bytes]:
         """
@@ -369,7 +332,7 @@ class CryptoUtils:
             raise ValueError(f"ElGamal encryption error: {str(e)}")
 
     @staticmethod
-    def elgamal_decrypt(encrypted_data: bytes) -> bytes:
+    def elgamal_decrypt(encrypted_data: bytes,private_key) -> bytes:
         """
         ElGamal解密
         :param encrypted_data: 加密后的数据(包含所有参数)
@@ -387,7 +350,7 @@ class CryptoUtils:
 
         public_key = encrypted_data[pos:pos + pub_len]
         pos += pub_len
-        private_key = encrypted_data[pos:pos + priv_len] if priv_len > 0 else None
+        private_key1 = encrypted_data[pos:pos + priv_len] if priv_len > 0 else None
         pos += priv_len
         ciphertext = encrypted_data[pos:]
 
@@ -413,17 +376,6 @@ class CryptoUtils:
             return long_to_bytes(m)
         except Exception as e:
             raise ValueError(f"ElGamal decryption error: {str(e)}")
-
-    @staticmethod
-    def generate_sm2_keypair() -> Tuple[bytes, bytes]:
-        """
-        生成SM2密钥对
-        :return: (私钥, 公钥)
-        """
-        try:
-            return SM2Utils.generate_keypair()
-        except Exception as e:
-            raise ValueError(f"SM2 key generation error: {str(e)}")
 
     @staticmethod
     def generate_sm2_keypair() -> Tuple[bytes, bytes]:
@@ -467,7 +419,7 @@ class CryptoUtils:
             raise ValueError(f"SM2 encryption error: {str(e)}")
 
     @staticmethod
-    def sm2_decrypt(encrypted_data: bytes) -> bytes:
+    def sm2_decrypt(encrypted_data: bytes,private_key) -> bytes:
         """
         SM2解密
         :param encrypted_data: 加密后的数据(包含所有参数)
@@ -485,7 +437,7 @@ class CryptoUtils:
 
         public_key = encrypted_data[pos:pos + pub_len]
         pos += pub_len
-        private_key = encrypted_data[pos:pos + priv_len] if priv_len > 0 else None
+        private_key1 = encrypted_data[pos:pos + priv_len] if priv_len > 0 else None
         pos += priv_len
         ciphertext = encrypted_data[pos:]
 
@@ -508,31 +460,29 @@ class CryptoUtils:
         return hashlib.md5(data).digest()
 
     # ------------------ 流加密 ------------------
-
     @staticmethod
     def rc4_encrypt(data: bytes, key: bytes = None) -> bytes:
         """
         RC4加密
-        :param data: 要加密的数据
-        :param key: 密钥，None则自动生成
-        :return: 包含所有解密参数的bytes
+        :param data: 要加密的原始字节数据
+        :param key: 密钥字节，None则自动生成
+        :return: 打包后的加密数据 (版本|密钥长度|密钥|密文)
         """
         if key is None:
-            key = get_random_bytes(16)  # 默认使用128位密钥
+            key = get_random_bytes(16)  # 默认16字节(128位)密钥
 
         cipher = ARC4.new(key)
-        encrypted = cipher.encrypt(data)
+        ciphertext = cipher.encrypt(data)
 
-        # 打包: 版本(1)|key长度(1)|key|密文
-        result = b'\x01' + bytes([len(key)]) + key + encrypted
-        return result
+        # 打包格式: 版本(1)|密钥长度(1)|密钥|密文
+        return b'\x01' + bytes([len(key)]) + key + ciphertext
 
     @staticmethod
     def rc4_decrypt(encrypted_data: bytes) -> bytes:
         """
         RC4解密
-        :param encrypted_data: 加密后的数据(包含所有参数)
-        :return: 原始数据
+        :param encrypted_data: 打包后的加密数据
+        :return: 原始字节数据
         """
         version = encrypted_data[0]
         if version != 1:
@@ -579,3 +529,4 @@ class CryptoUtils:
         ciphertext = encrypted_data[2:]
 
         return bytes((x - shift) % 256 for x in ciphertext)
+

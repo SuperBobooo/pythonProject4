@@ -1,12 +1,12 @@
 class CACipher:
     def __init__(self, key):
-        """CA密码实现"""
+        
         if len(key) != 16:
             raise ValueError("Key must be 16 bytes (128 bits)")
         self.key = key
 
     def encrypt(self, plaintext):
-        """加密函数"""
+        
         ciphertext = bytearray()
         key = self.key
 
@@ -19,14 +19,14 @@ class CACipher:
             encrypted_byte = (byte + key_byte + i) % 256
             ciphertext.append(encrypted_byte)
 
-            if i < 5:  # 只显示前5个字节的加密过程
+            if i < 5:
                 print(f"Byte {i}: {byte:02x} + {key_byte:02x} + {i} = {encrypted_byte:02x}")
 
         print(f"Final ciphertext: {bytes(ciphertext).hex()[:32]}...")
         return bytes(ciphertext)
 
     def decrypt(self, ciphertext):
-        """解密函数"""
+        
         plaintext = bytearray()
         key = self.key
 
@@ -39,7 +39,7 @@ class CACipher:
             decrypted_byte = (byte - key_byte - i) % 256
             plaintext.append(decrypted_byte)
 
-            if i < 5:  # 只显示前5个字节的解密过程
+            if i < 5:
                 print(f"Byte {i}: {byte:02x} - {key_byte:02x} - {i} = {decrypted_byte:02x}")
 
         print(f"Final plaintext: {bytes(plaintext).hex()[:32]}...")

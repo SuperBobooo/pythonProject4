@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Socket Client Implementation (Socket客户端实现)
-"""
+
+
 import socket
 import json
 import threading
@@ -10,16 +8,10 @@ from ..utils.logger import logger
 from ..utils.config import DEFAULT_HOST, DEFAULT_PORT, BUFFER_SIZE
 
 class SocketClient:
-    """Socket客户端类"""
+    
     
     def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
-        """
-        初始化Socket客户端
         
-        Args:
-            host: 服务器地址
-            port: 服务器端口
-        """
         self.host = host
         self.port = port
         self.client_socket = None
@@ -28,22 +20,20 @@ class SocketClient:
         self.receive_thread = None
     
     def set_message_handler(self, handler):
-        """设置消息处理器"""
+        
         self.message_handler = handler
     
     def connect(self):
-        """连接到服务器"""
+        
         try:
-            # 创建客户端socket
+
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            
-            # 连接到服务器
+
             self.client_socket.connect((self.host, self.port))
             self.connected = True
             
             logger.info(f"已连接到服务器 {self.host}:{self.port}")
-            
-            # 启动接收线程
+
             self.receive_thread = threading.Thread(target=self._receive_messages)
             self.receive_thread.daemon = True
             self.receive_thread.start()
@@ -56,7 +46,7 @@ class SocketClient:
             return False
     
     def disconnect(self):
-        """断开连接"""
+        
         self.connected = False
         
         if self.client_socket:
@@ -68,15 +58,14 @@ class SocketClient:
         logger.info("已断开与服务器的连接")
     
     def _receive_messages(self):
-        """接收消息线程"""
+        
         while self.connected:
             try:
-                # 接收数据
+
                 data = self.client_socket.recv(BUFFER_SIZE)
                 if not data:
                     break
-                
-                # 解析消息
+
                 try:
                     message = json.loads(data.decode('utf-8'))
                     self._process_message(message)
@@ -91,7 +80,7 @@ class SocketClient:
         self.connected = False
     
     def _process_message(self, message):
-        """处理接收到的消息"""
+        
         message_type = message.get('type', 'unknown')
         
         if message_type == 'response':
@@ -128,7 +117,7 @@ class SocketClient:
             logger.warning(f"未知消息类型: {message_type}")
     
     def send_message(self, message_type: str, **kwargs):
-        """发送消息"""
+        
         if not self.connected:
             logger.error("未连接到服务器")
             return False
@@ -150,61 +139,57 @@ class SocketClient:
             return False
     
     def send_text(self, content: str):
-        """发送文本消息"""
+        
         return self.send_message('text', content=content)
     
     def send_encrypt_request(self, plaintext: str, algorithm: str, key: str = ''):
-        """发送加密请求"""
+        
         return self.send_message('encrypt', 
                                plaintext=plaintext, 
                                algorithm=algorithm, 
                                key=key)
     
     def send_decrypt_request(self, ciphertext: str, algorithm: str, key: str = ''):
-        """发送解密请求"""
+        
         return self.send_message('decrypt', 
                                ciphertext=ciphertext, 
                                algorithm=algorithm, 
                                key=key)
     
     def send_key_exchange_request(self):
-        """发送密钥交换请求"""
+        
         return self.send_message('key_exchange')
     
     def is_connected(self) -> bool:
-        """检查是否已连接"""
+        
         return self.connected
     
     def get_connection_info(self) -> dict:
-        """获取连接信息"""
+        
         return {
             'host': self.host,
             'port': self.port,
             'connected': self.connected
         }
 
-# 测试函数
 def test_socket_client():
-    """测试Socket客户端"""
-    client = SocketClient()
     
-    # 设置消息处理器
+    client = SocketClient()
+
     def message_handler(message):
         print(f"收到消息: {message}")
     
     client.set_message_handler(message_handler)
     
     try:
-        # 连接到服务器
+
         if client.connect():
             print("连接成功！")
-            
-            # 发送测试消息
+
             client.send_text("Hello, Server!")
             client.send_encrypt_request("Hello", "caesar", "3")
             client.send_key_exchange_request()
-            
-            # 等待响应
+
             time.sleep(2)
             
         else:

@@ -3,13 +3,12 @@ import os
 
 class DESCipher:
     def __init__(self, key):
-        """DES密码实现"""
+        
         if len(key) != 8:
             raise ValueError("DES key must be 8 bytes (64 bits)")
         self.key = key
         self.block_size = 8
 
-        # 初始置换表
         self.ip_table = [
             58, 50, 42, 34, 26, 18, 10, 2,
             60, 52, 44, 36, 28, 20, 12, 4,
@@ -21,7 +20,6 @@ class DESCipher:
             63, 55, 47, 39, 31, 23, 15, 7
         ]
 
-        # 逆初始置换表
         self.ip_inv_table = [
             40, 8, 48, 16, 56, 24, 64, 32,
             39, 7, 47, 15, 55, 23, 63, 31,
@@ -34,14 +32,14 @@ class DESCipher:
         ]
 
     def pad(self, data):
-        """PKCS7填充"""
+        
         padding_len = self.block_size - (len(data) % self.block_size)
         return data + bytes([padding_len] * padding_len)
 
     def unpad(self, data):
-        """PKCS7去填充"""
+        
         padding_len = data[-1]
-        # 验证填充
+
         if padding_len < 1 or padding_len > self.block_size:
             raise ValueError("Invalid padding")
         if data[-padding_len:] != bytes([padding_len] * padding_len):
@@ -49,20 +47,17 @@ class DESCipher:
         return data[:-padding_len]
 
     def encrypt(self, plaintext):
-        """DES加密 - CBC模式"""
+        
         print("\n[DES Encryption Process]")
         print(f"Key: {self.key.hex()}")
         print(f"Original plaintext length: {len(plaintext)} bytes")
 
-        # 添加PKCS7填充
         padded = self.pad(plaintext)
         print(f"After padding (PKCS7): {len(padded)} bytes")
 
-        # 生成随机IV
         iv = os.urandom(self.block_size)
         print(f"Generated IV: {iv.hex()}")
 
-        # 分块加密
         ciphertext = bytearray()
         prev_block = iv
 
@@ -71,38 +66,32 @@ class DESCipher:
             print(f"\nBlock {i // self.block_size}:")
             print(f"  Plaintext block: {block.hex()}")
 
-            # CBC模式: XOR with previous ciphertext block
             xored = self._xor_bytes(block, prev_block)
             print(f"  After XOR with {'IV' if i == 0 else 'prev block'}: {xored.hex()}")
 
-            # 初始置换
             permuted = self._permute(xored, self.ip_table)
             print(f"  After initial permutation: {permuted.hex()}")
 
-            # DES加密
             encrypted_block = self._des_encrypt_block(permuted)
             print(f"  Encrypted block: {encrypted_block.hex()}")
 
             ciphertext.extend(encrypted_block)
             prev_block = encrypted_block
 
-        # 将IV放在密文前面
         full_ciphertext = iv + ciphertext
         print(f"\nFinal ciphertext (IV + encrypted data): {full_ciphertext.hex()}")
         return full_ciphertext
 
     def decrypt(self, ciphertext):
-        """DES解密 - CBC模式"""
+        
         print("\n[DES Decryption Process]")
         print(f"Key: {self.key.hex()}")
         print(f"Ciphertext length: {len(ciphertext)} bytes")
 
-        # 提取IV
         iv = ciphertext[:self.block_size]
         ciphertext = ciphertext[self.block_size:]
         print(f"Extracted IV: {iv.hex()}")
 
-        # 分块解密
         plaintext = bytearray()
         prev_block = iv
 
@@ -111,22 +100,18 @@ class DESCipher:
             print(f"\nBlock {i // self.block_size}:")
             print(f"  Encrypted block: {block.hex()}")
 
-            # DES解密
             decrypted_block = self._des_decrypt_block(block)
             print(f"  After DES decrypt: {decrypted_block.hex()}")
 
-            # 逆初始置换
             permuted = self._permute(decrypted_block, self.ip_inv_table)
             print(f"  After inverse permutation: {permuted.hex()}")
 
-            # CBC模式: XOR with previous ciphertext block
             xored = self._xor_bytes(permuted, prev_block)
             print(f"  After XOR with {'IV' if i == 0 else 'prev block'}: {xored.hex()}")
 
             plaintext.extend(xored)
             prev_block = block
 
-        # 去除填充
         try:
             unpadded = self.unpad(plaintext)
             print(f"\nAfter unpadding: {len(unpadded)} bytes")
@@ -137,7 +122,7 @@ class DESCipher:
             return plaintext  # 返回未去填充的数据用于调试
 
     def _permute(self, block, table):
-        """通用置换函数"""
+        
         permuted = bytearray(8)
         for i in range(64):
             bit_pos = table[i] - 1
@@ -151,20 +136,19 @@ class DESCipher:
         return bytes(permuted)
 
     def _des_encrypt_block(self, block):
-        """简化的DES块加密"""
-        # 这里使用简单的XOR作为示例，实际应该实现完整的DES算法
+
         encrypted = bytearray()
         for i in range(len(block)):
             encrypted.append(block[i] ^ self.key[i % len(self.key)])
         return bytes(encrypted)
 
     def _des_decrypt_block(self, block):
-        """简化的DES块解密"""
+        
         decrypted = bytearray()
         for i in range(len(block)):
             decrypted.append(block[i] ^ self.key[i % len(self.key)])
         return bytes(decrypted)
 
     def _xor_bytes(self, a, b):
-        """字节异或"""
+        
         return bytes(x ^ y for x, y in zip(a, b))

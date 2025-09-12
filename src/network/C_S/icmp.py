@@ -1,108 +1,96 @@
-from scapy.all import  send, sniff
+from scapy.all import send, sniff
+import json
+import threading
+import time
+
 from scapy.layers.inet import ICMP, IP
 
 
 class ICMPSteganography:
     def __init__(self, target_ip, secret_key="secret_key"):
-        """
-        初始化目标IP地址和密钥，用于验证ICMP包是否为伪装的消息。
-        :param target_ip: 目标IP地址，用于发送ICMP包。
-        :param secret_key: 用于验证消息的秘密密钥（可选）。
-        """
         self.target_ip = target_ip
         self.secret_key = secret_key
-        self.received_flag = False  # 标志用于控制停止监听
+        self.received_data = {}
+        self.received_flag = False
+        self.lock = threading.Lock()
 
-    def encode_message(self, message):
-        """
-        将消息编码为合适的格式，将它们包装为ICMP负载数据。
-        :param message: 需要伪装的消息。
-        :return: 消息经过编码的字节串。
-        """
+    def encode_message(self, message: str) -> bytes:
         return message.encode('utf-8')
 
-    def send_icmp_request(self, message):
-        """
-        发送带有伪装信息的ICMP请求，并将密钥嵌入到消息中。
-        :param message: 需要伪装在ICMP包中的消息。
-        """
-        # 在消息中加入密钥
-        message_with_key = f"{self.secret_key}:{message}"
-        payload = self.encode_message(message_with_key)
-        packet = IP(dst=self.target_ip) / ICMP() / (payload)
-
-        print(f"发送ICMP包到 {self.target_ip}，带有消息：'{message_with_key}'")
-        send(packet)
-
-    def decode_message(self, payload):
-        """
-        解码ICMP包中的负载数据。
-        :param payload: ICMP包中的负载部分。
-        :return: 解码后的消息。
-        """
+    def decode_message(self, payload: bytes) -> str:
         return payload.decode('utf-8')
 
-    def verify_message(self, payload):
-        """
-        验证ICMP包中的负载是否为伪装的消息。
-        :param payload: ICMP包中的负载部分。
-        :return: 如果是伪装的消息，返回True，否则返回False。
-        """
+    def send_message(self, message: str, chunk_size=200):
+        chunks = [message[i:i+chunk_size] for i in range(0, len(message), chunk_size)]
+        total_chunks = len(chunks)
+        for idx, chunk in enumerate(chunks):
+            message_with_key = f"{self.secret_key}:{chunk}"
+            payload = self.encode_message(json.dumps({
+                "id": int(time.time()),
+                "index": idx,
+                "total_chunks": total_chunks,
+                "data": message_with_key
+            }))
+            packet = IP(dst=self.target_ip) / ICMP() / payload
+            print(f"发送 {idx+1}/{total_chunks} 到 {self.target_ip}，内容：'{chunk}'")
+            send(packet)
+            time.sleep(0.05)  # 避免太快发送
+
+    # 验证是否是伪装信息
+    def verify_message(self, payload_bytes: bytes) -> bool:
         try:
-            message = self.decode_message(payload)
-            if message.startswith(self.secret_key):  # 如果消息包含密钥，说明是伪装的消息
+            payload_str = self.decode_message(payload_bytes)
+            data_json = json.loads(payload_str)
+            # 校验密钥前缀
+            if data_json.get("data", "").startswith(self.secret_key + ":"):
                 return True
+        except Exception:
             return False
-        except Exception as e:
-            print(f"解码失败: {e}")
-            return False
+        return False
 
-    def packet_callback(self, packet):
-        """
-        回调函数，用于处理接收到的ICMP包，检查包中的伪装信息。
-        :param packet: 接收到的ICMP包。
-        """
-        if packet.haslayer(ICMP):
-            payload = bytes(packet[ICMP].payload)
-            print(f"接收到ICMP包，负载内容: {payload}")
-
-            if self.verify_message(payload):
-                print(f"这是一个伪装的ICMP包，内容为：{self.decode_message(payload)}")
-                self.received_flag = True  # 设置标志，停止监听
+    # 监听回调函数
+    def _sniff_callback(self, packet):
+        if ICMP in packet:
+            payload_bytes = bytes(packet[ICMP].payload)
+            print(f"接收到ICMP包，负载内容: {payload_bytes}")
+            if self.verify_message(payload_bytes):
+                payload_str = self.decode_message(payload_bytes)
+                data_json = json.loads(payload_str)
+                idx = data_json["index"]
+                total = data_json["total_chunks"]
+                message = data_json["data"][len(self.secret_key)+1:]  # 去掉密钥
+                with self.lock:
+                    self.received_data[idx] = message
+                    if len(self.received_data) == total:
+                        self.received_flag = True
             else:
-                print("这是一个正常的ICMP包，不包含伪装的信息。")
+                print("ICMP正常，不包含伪装的信息。")
 
-    def receive_icmp_response(self, timeout=10):
-        """
-        接收并解析ICMP响应包，检查其是否为伪装的ICMP包。
-        :param timeout: 监听响应的超时时间，默认为10秒。
-        """
-        print("开始监听ICMP响应...")
-        sniff(filter="icmp", prn=self.packet_callback, timeout=timeout)
+    def start_listening(self, timeout=60):
+        print("监听中...")
+        sniff(filter="icmp", prn=self._sniff_callback, timeout=timeout, stop_filter=lambda x: self.received_flag)
 
-        # 如果接收到伪装包，停止监听
-        while not self.received_flag:
-            pass
-        print("接收到伪装的ICMP包，停止监听。")
-
-    def send_and_receive(self, message, timeout=10):
-        """
-        发送ICMP请求并接收响应。
-        :param message: 需要伪装的消息。
-        :param timeout: 监听响应的超时时间，默认为10秒。
-        """
-        self.send_icmp_request(message)
-        self.receive_icmp_response(timeout)
+    def get_message(self) -> str:
+        with self.lock:
+            # 按分片索引排序
+            return "".join([self.received_data[i] for i in sorted(self.received_data.keys())])
 
 
-# 使用实例
 if __name__ == "__main__":
-    # 设置目标IP地址
-    target_ip = "8.8.8.8"  # 可根据需求修改目标IP
+    target_ip = "8.8.8.8"
+    steg = ICMPSteganography(target_ip, secret_key="secret_key")
+    message = "anbasdbiuasdabsjubdli2qub3fdio2u\nj3bdio2uj3b" * 50  # 测试长消息
 
-    # 创建ICMPSteganography实例
-    icmp_tool = ICMPSteganography(target_ip)
+    # 开启监听线程
+    listener_thread = threading.Thread(target=steg.start_listening, args=(30,))
+    listener_thread.start()
 
-    # 发送并接收带有伪装信息的ICMP包
-    secret_message = "这是一个测试信息，伪装在ICMP包中"
-    icmp_tool.send_and_receive(secret_message)
+    # 发送消息
+    steg.send_message(message, chunk_size=50)
+
+    listener_thread.join()
+
+    if steg.received_flag:
+        print("接收到完整消息：", steg.get_message())
+    else:
+        print("接收失败，未完整收到消息。")

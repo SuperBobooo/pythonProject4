@@ -507,8 +507,8 @@ class NormalDe(tk.Frame):
         self.sock = None
         self.cipher = None
         self.comm = None
-        self.key_pair = None  # 用于存储非对称加密的密钥对
-        self.connection_active = False  # 新增连接状态标志
+        self.key_pair = None
+        self.connection_active = False
 
 
         frame_conn = ttk.LabelFrame(self, text="Encryption Settings")
@@ -596,7 +596,6 @@ class NormalDe(tk.Frame):
         return
 
     def on_cipher_change(self, event=None):
-        """当加密算法改变时更新UI"""
         cipher_type = self.cipher_type.get()
 
         asymmetric_ciphers = ["RSA", "ElGamal", "SM2"]

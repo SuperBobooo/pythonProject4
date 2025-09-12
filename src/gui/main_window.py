@@ -6,8 +6,6 @@ from tkinter import ttk, messagebox, filedialog, scrolledtext
 import threading
 import os
 import sys
-from src.network.C_S.server import run_server
-from src.network.C_S.client import ClientApp
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
@@ -590,9 +588,6 @@ class MainWindow:
         except Exception as e:
             messagebox.showerror("错误", f"启动服务器失败: {e}")
 
-    def _run_server(self):
-        
-        run_server()  # 调用 server.py 中的 run_server 函数
 
     def _connect_client(self):
         
@@ -612,10 +607,6 @@ class MainWindow:
 
         threading.Thread(target=self._run_client_app, daemon=True).start()
 
-    def _run_client_app(self):
-        
-        client_app = ClientApp()  # 创建 ClientApp 实例
-        client_app.mainloop()  # 启动客户端窗口的 Tkinter 主循环
     
     def _disconnect(self):
         

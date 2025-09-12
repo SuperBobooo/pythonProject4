@@ -24,7 +24,7 @@ class ECCProxyServer:
         self.server_socket = None
 
     def resolve_target(self, target_str):
-        """解析目标地址和端口"""
+        
         if "://" in target_str:
             parsed = urlparse(target_str)
             host = parsed.hostname
@@ -33,25 +33,24 @@ class ECCProxyServer:
         elif ":" in target_str:
             host, port = target_str.split(":", 1)
             return host, int(port), "https" if port == "443" else "http"
-        # else:
-        #     return host, DEFAULT_HTTP_PORT, "http"
+
+
 
     def verify_and_decrypt(self, aes_cipher, ciphertext, md5_recv):
-        """验证并解密数据"""
-        # if hashlib.md5(ciphertext).digest() != md5_recv:
-        #     raise ValueError("MD5 verification failed")
+        
+
+
         return aes_cipher.decrypt(ciphertext)
 
     def handle_https_connect(self, conn, aes_cipher, target_host, target_port):
-        """处理HTTPS CONNECT请求"""
+        
         try:
             with socket.create_connection((target_host, target_port), timeout=15) as remote:
-                # 发送成功响应
+
                 success_response = aes_cipher.encrypt(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                 md5_val = hashlib.md5(success_response).digest()
                 conn.sendall(success_response + md5_val)
 
-                # 启动原始数据隧道
                 self.start_raw_tunnel(conn, remote)
 
         except Exception as e:
@@ -61,24 +60,21 @@ class ECCProxyServer:
             conn.sendall(error_response + hashlib.md5(error_response).digest())
 
     def handle_http_request(self, conn, aes_cipher, target_host, target_port):
-        """处理HTTP请求"""
+        
         try:
             with socket.create_connection((target_host, target_port), timeout=15) as remote:
-                # 接收客户端请求
+
                 packet = conn.recv(BUFFER_SIZE)
                 ciphertext, md5_recv = packet[:-16], packet[-16:]
                 plaintext = self.verify_and_decrypt(aes_cipher, ciphertext, md5_recv)
 
-                # 修复HTTP头
                 if b"Host: " not in plaintext:
                     host_header = f"Host: {target_host}\r\n".encode()
                     parts = plaintext.split(b"\r\n\r\n", 1)
                     plaintext = parts[0] + b"\r\n" + host_header + b"\r\n\r\n" + (parts[1] if len(parts) > 1 else b"")
 
-                # 转发到目标服务器
                 remote.sendall(plaintext)
 
-                # 转发响应
                 while True:
                     data = remote.recv(BUFFER_SIZE)
                     if not data:
@@ -94,7 +90,7 @@ class ECCProxyServer:
             conn.sendall(error_response + hashlib.md5(error_response).digest())
 
     def start_raw_tunnel(self, conn, remote):
-        """原始数据隧道"""
+        
 
         def forward(src, dst):
             try:
@@ -117,7 +113,7 @@ class ECCProxyServer:
         print(f"\n[SERVER] New connection from {client_ip}:{client_port}")
 
         try:
-            # 1. 认证阶段
+
             client_uuid = conn.recv(36).decode('utf-8').strip()
             if client_uuid not in VALID_UUIDS:
                 conn.sendall(b"AUTH FAILED")
@@ -126,7 +122,6 @@ class ECCProxyServer:
             client_name = VALID_UUIDS[client_uuid]
             print(f"[AUTH] {client_name} authenticated")
 
-            # 2. 密钥交换
             ecc = ECCCipher()
             priv = ecc.key
             pub = ecc.generate_public_key(priv)
@@ -140,7 +135,6 @@ class ECCProxyServer:
             aes_cipher = AESCipher(aes_key)
             print(f"[CRYPTO] AES Key established: {aes_key.hex()}")
 
-            # 3. 接收目标地址
             packet = conn.recv(BUFFER_SIZE)
             ciphertext, md5_recv = packet[:-16], packet[-16:]
             target_info = self.verify_and_decrypt(aes_cipher, ciphertext, md5_recv).decode('utf-8').strip()
@@ -155,10 +149,8 @@ class ECCProxyServer:
             target_host, target_port, scheme = self.resolve_target(target_info)
             print(f"[TARGET] {client_name} -> {scheme}://{target_host}:{target_port}")
 
-            # 4. 发送确认
             conn.sendall(aes_cipher.encrypt(b"ACK") + hashlib.md5(aes_cipher.encrypt(b"ACK")).digest())
 
-            # 5. 请求处理
             if scheme == "https":
                 self.handle_https_connect(conn, aes_cipher, target_host, target_port)
             else:
@@ -172,7 +164,7 @@ class ECCProxyServer:
             print(f"[SERVER] Connection closed: {client_ip}:{client_port}")
 
     def start(self):
-        """启动服务器"""
+        
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((HOST, PORT))

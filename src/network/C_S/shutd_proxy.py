@@ -5,9 +5,8 @@ from socket import SOL_SOCKET, SO_REUSEADDR
 
 
 def kill_process_by_port(port):
-    """强制终止占用指定端口的进程"""
+    
     try:
-        # Windows系统使用netstat命令查找进程
         result = subprocess.run(
             ['netstat', '-ano', '|', 'findstr', str(port)],
             shell=True,
@@ -21,7 +20,6 @@ def kill_process_by_port(port):
 
         print(result.stdout)
 
-        # 提取PID
         lines = result.stdout.strip().split('\n')
         pids = set()
 
@@ -33,7 +31,6 @@ def kill_process_by_port(port):
         if not pids:
             return False
 
-        # 终止所有相关进程
         for pid in pids:
             try:
                 subprocess.run(['taskkill', '/F', '/PID', pid], check=True)
@@ -54,5 +51,5 @@ def release_port(port):
 
 
 if __name__ == "__main__":
-    PORT_TO_RELEASE = 12345  # 要释放的端口号
+    PORT_TO_RELEASE = 12345
     release_port(PORT_TO_RELEASE)

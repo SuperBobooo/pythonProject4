@@ -23,8 +23,6 @@ ENC_DIR = "enc"
 if not os.path.exists(ENC_DIR):
     os.makedirs(ENC_DIR)
 
-
-# 工具函数
 def select_cipher(key, cipher_type):
     if cipher_type == 'CA':
         return CACipher(key[:16])
@@ -49,7 +47,7 @@ def apply_style():
               background=[("active", "#357ABD")])
     style.configure("TLabel", font=("Arial", 11))
     style.configure("TEntry", font=("Consolas", 11))
-# ===================== ECC Proxy =====================
+
 
 import socket
 import threading
@@ -70,34 +68,29 @@ class ECCProxyClient(tk.Frame):
         super().__init__(master, bg="white")
         self.pack(fill="both", expand=True)
 
-        # 连接状态
         self.sock = None
         self.aes_cipher = None
         self.connection_active = False
         self.lock = threading.Lock()
 
-        # 初始化UI
         self.setup_ui()
 
     def setup_ui(self):
         """初始化用户界面"""
-        # 连接设置框架
+
         frame_conn = ttk.LabelFrame(self, text="Connection Settings")
         frame_conn.pack(fill="x", padx=10, pady=10)
 
-        # 目标主机输入
         ttk.Label(frame_conn, text="Target Host:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_host = ttk.Entry(frame_conn, width=30)
         self.entry_host.insert(0, "www.baidu.com")
         self.entry_host.grid(row=0, column=1, padx=5, pady=5)
 
-        # 目标端口输入
         ttk.Label(frame_conn, text="Target Port:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.entry_port = ttk.Entry(frame_conn, width=10)
         self.entry_port.insert(0, "80")
         self.entry_port.grid(row=1, column=1, padx=5, pady=5)
 
-        # 连接按钮
         self.btn_connect = ttk.Button(
             frame_conn,
             text="Connect",
@@ -105,7 +98,6 @@ class ECCProxyClient(tk.Frame):
         )
         self.btn_connect.grid(row=0, column=2, rowspan=2, padx=10)
 
-        # 发送请求按钮
         self.btn_send = ttk.Button(
             frame_conn,
             text="Send HTTP GET",
@@ -114,7 +106,6 @@ class ECCProxyClient(tk.Frame):
         )
         self.btn_send.grid(row=0, column=3, rowspan=2, padx=10)
 
-        # 输出区域
         frame_out = ttk.LabelFrame(self, text="Server Response")
         frame_out.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -138,61 +129,51 @@ class ECCProxyClient(tk.Frame):
     def connect_server(self):
         """连接到代理服务器"""
         try:
-            # 清理旧连接
+
             if self.connection_active:
                 self.disconnect()
 
-            # 创建新连接
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(10)
             self.sock.connect((SERVER_HOST, SERVER_PORT))
             self.log(f"[CLIENT] Connected to {SERVER_HOST}:{SERVER_PORT}")
 
-            # 1. UUID认证
             self.sock.sendall(UUID.encode('utf-8'))
             resp = self.sock.recv(1024).decode('utf-8')
             self.log(f"[SERVER] {resp}")
             if "FAILED" in resp:
                 raise ConnectionError("Authentication failed")
 
-            # 2. ECC密钥交换
             ecc = ECCCipher()
             priv = ecc.key
             pub = ecc.generate_public_key(priv)
 
-            # 接收服务器公钥
             server_pub_str = self.sock.recv(1024).decode('utf-8')
             x, y = map(int, server_pub_str.split(","))
             server_pub = (x, y)
 
-            # 发送客户端公钥
             self.sock.sendall(f"{pub[0]},{pub[1]}".encode('utf-8'))
 
-            # 生成共享密钥
             shared_secret = ecc.generate_shared_secret(priv, server_pub)
             aes_key = ecc.derive_key(shared_secret)[:16]
             self.aes_cipher = AESCipher(aes_key)
             self.log(f"[CRYPTO] Shared AES Key: {aes_key.hex()}")
 
-            # 3. 发送目标地址
             target = f"{self.entry_host.get()}:{self.entry_port.get()}"
             enc_target = self.aes_cipher.encrypt(target.encode('utf-8'))
             md5_val = hashlib.md5(enc_target).digest()
             self.sock.sendall(enc_target + md5_val)
 
-            # 等待服务器确认
             ack_packet = self.sock.recv(BUFFER_SIZE)
             ack_cipher, ack_md5 = ack_packet[:-16], ack_packet[-16:]
             ack = self.aes_cipher.decrypt(ack_cipher)
             if ack != b"ACK":
                 raise ConnectionError("Server acknowledgement failed")
 
-            # 更新状态
             self.connection_active = True
             self.btn_send.config(state="normal")
             self.log("[+] Connection fully established")
 
-            # 启动接收线程
             threading.Thread(target=self._receive_loop, daemon=True).start()
 
         except Exception as e:
@@ -206,7 +187,6 @@ class ECCProxyClient(tk.Frame):
             if not self.connection_active:
                 raise ConnectionError("Not connected to server")
 
-            # 构建HTTP请求
             host = self.entry_host.get()
             request = (
                 f"GET / HTTP/1.1\r\n"
@@ -231,15 +211,13 @@ class ECCProxyClient(tk.Frame):
                 raise ConnectionError("Not connected to server")
 
             try:
-                # 加密和校验
+
                 enc_data = self.aes_cipher.encrypt(data)
                 md5_val = hashlib.md5(enc_data).digest()
 
-                # 检查包长度
                 if len(enc_data) < 16 or len(md5_val) != 16:
                     raise ValueError("Invalid encrypted packet format")
 
-                # 发送数据
                 self.sock.sendall(enc_data + md5_val)
             except Exception as e:
                 self.disconnect()
@@ -254,22 +232,18 @@ class ECCProxyClient(tk.Frame):
                     self.log("[SERVER] Connection closed by server")
                     break
 
-                # 检查最小长度
                 if len(packet) < 32:
                     self.log("[ERROR] Invalid packet length")
                     continue
 
                 ciphertext, md5_recv = packet[:-16], packet[-16:]
 
-                # 验证完整性
-                # if hashlib.md5(ciphertext).digest() != md5_recv:
-                #     self.log("[SECURITY] MD5 verification failed")
-                #     continue
 
-                # 解密数据
+
+
+
                 plaintext = self.aes_cipher.decrypt(ciphertext)
 
-                # 尝试解码为文本
                 try:
                     decoded_text = plaintext.decode('utf-8', errors='replace')
                     self.log(decoded_text)
@@ -356,13 +330,11 @@ class ECC_en_Client(tk.Frame):
             self.comm = SocketCommunicator(host=host, port=SERVER_PORT)
             self.sock = self.comm.connect_to_server()
 
-            # 发送ECC请求
             self.comm.send_message(self.sock, b"ECC_REQUEST")
 
-            # 接收服务器公钥
             server_pub_str = self.comm.receive_message(self.sock).decode()
-            # print(server_pub_str)
-            # x, y = map(int, server_pub_str.split(","))
+
+
             self.server_pub = ast.literal_eval(server_pub_str)
 
             self.btn_send_msg.config(state="normal")
@@ -377,9 +349,9 @@ class ECC_en_Client(tk.Frame):
         try:
             self.comm.send_message(self.sock, b"a")
             msg = self.entry_msg.get()
-            # 使用服务器的公钥加密消息
+
             ciphertext_package = self.ecc_cipher.encrypt(msg.encode(), self.server_pub)
-            # 发送完整的密文包
+
             self.comm.send_message(self.sock, str(ciphertext_package).encode())
             self.log(f"[CLIENT] 已发送加密消息: {ciphertext_package}")
         except Exception as e:
@@ -407,8 +379,6 @@ class ECC_en_Client(tk.Frame):
         aes_cipher = AESCipher(aes_key)
         return aes_cipher.decrypt(data)
 
-
-# ===================== DH Secure =====================
 class DHSecureClient(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
@@ -530,7 +500,6 @@ class DHSecureClient(tk.Frame):
         finally:
             self.sock.close()
 
-# ===================== NormalDe =====================
 class NormalDe(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
@@ -553,7 +522,7 @@ class NormalDe(tk.Frame):
         self.entry_host.grid(row=0, column=1, padx=5, pady=5)
         self.btn_connect = ttk.Button(frame_conn, text="Connect", command=self.connect_server)
         self.btn_connect.grid(row=0, column=3, rowspan=3, padx=10)
-        # 加密算法选择
+
         self.cipher_type = tk.StringVar(value="AES")  # 默认值
         self.combo_cipher = ttk.Combobox(frame_conn, textvariable=self.cipher_type,
                                          values=["AES", "DES", "CA", "ElGamal", "MD5", "RC4", "RSA", "SM2"],
@@ -562,17 +531,14 @@ class NormalDe(tk.Frame):
         self.combo_cipher.bind("<<ComboboxSelected>>", self.on_cipher_change)
         self.combo_cipher.set(a)
 
-        # 密钥输入框
         ttk.Label(frame_conn, text="Key:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.entry_key = ttk.Entry(frame_conn, width=50)
         self.entry_key.grid(row=1, column=1, padx=5, pady=5)
 
-        # 明文输入框
         ttk.Label(frame_conn, text="Plaintext:").grid(row=2, column=0, sticky="w", padx=5, pady=5)
         self.entry_plaintext = ttk.Entry(frame_conn, width=50)
         self.entry_plaintext.grid(row=2, column=1, padx=5, pady=5)
 
-        # 操作按钮
         self.btn_encrypt = ttk.Button(frame_conn, text="Encrypt", command=self.encrypt_data)
         self.btn_encrypt.grid(row=0, column=2, padx=5, pady=5, rowspan=3)
 
@@ -583,7 +549,7 @@ class NormalDe(tk.Frame):
                                                    font=("Consolas", 10), bg="black", fg="lime")
         self.text_area.pack(fill="both", expand=True)
         self.entry_key.bind("<Key>", self.validate_key_input)  # 添加输入验证
-        # 初始化时设置密钥框状态
+
         self.on_cipher_change()
 
     def connect_server(self):
@@ -596,7 +562,6 @@ class NormalDe(tk.Frame):
             self.sock = self.comm.connect_to_server()
             self.connection_active = True
 
-            # 发送初始化消息
             self.comm.send_message(self.sock, b"NO_REQUEST")
             self.comm.send_message(self.sock, b"NO_REQUEST")
 
@@ -625,21 +590,20 @@ class NormalDe(tk.Frame):
         """验证密钥输入"""
         cipher_type = self.cipher_type.get()
         if cipher_type in ["AES", "DES", "CA"]:
-            # 允许所有键盘输入
+
             return
-        # 对其他加密类型不做限制
+
         return
 
     def on_cipher_change(self, event=None):
         """当加密算法改变时更新UI"""
         cipher_type = self.cipher_type.get()
 
-        # 非对称加密算法列表
         asymmetric_ciphers = ["RSA", "ElGamal", "SM2"]
-        # 不需要密钥的算法列表
+
         no_key_ciphers = ["MD5"]
         if cipher_type in asymmetric_ciphers:
-            # 非对称加密，生成密钥对并显示公钥
+
             threading.Thread(target=self.generate_key_pair, args=(cipher_type,), daemon=True).start()
             self.entry_key.config(state="readonly")
         elif cipher_type in no_key_ciphers:
@@ -667,7 +631,6 @@ class NormalDe(tk.Frame):
             self.btn_encrypt.config(state="disabled")
             self.log(f"[{cipher_type}] Generating key pair...")
 
-            # 生成密钥对（假设已确认这部分工作正常）
             if cipher_type == "RSA":
                 private_key, public_key = CryptoUtils.generate_rsa_keypair()
             elif cipher_type == "ElGamal":
@@ -679,7 +642,6 @@ class NormalDe(tk.Frame):
 
             self.key_pair = (private_key, public_key)
 
-            # 在主线程更新 UI
             self.after(0, self._display_public_key, public_key.hex())  # 关键修复！
             self.log(f"[{cipher_type}] Key Pair Generated:")
             self.log(f"Private Key: {private_key.hex()}")
@@ -713,7 +675,7 @@ class NormalDe(tk.Frame):
 
             self.comm.send_message(self.sock, cipher_type.encode())
             if cipher_type == "AES":
-                # 处理AES密钥
+
                 key_str = self.entry_key.get()
                 if not key_str:
                     key = os.urandom(16)  # 生成随机AES密钥
@@ -721,7 +683,7 @@ class NormalDe(tk.Frame):
                 else:
                     try:
                         key = bytes.fromhex(key_str)
-                        if len(key) not in (16, 24, 32):  # AES支持128/192/256位
+                        if len(key) not in (16, 24, 32):
                             raise ValueError("AES key must be 16, 24 or 32 bytes")
                     except ValueError:
                         self.log("Invalid AES key - must be hex string of 32, 48 or 64 chars")
@@ -730,10 +692,10 @@ class NormalDe(tk.Frame):
                 encrypted = CryptoUtils.aes_encrypt(plaintext, key)
                 self.comm.send_message(self.sock, encrypted)
             elif cipher_type == "DES":
-                # 处理DES密钥
+
                 key_str = self.entry_key.get()
                 if not key_str:
-                    key = os.urandom(8)  # 生成随机DES密钥
+                    key = os.urandom(8)
                     self.entry_key.insert(0, key.hex())
                 else:
                     try:
@@ -747,40 +709,37 @@ class NormalDe(tk.Frame):
                 encrypted = CryptoUtils.des_encrypt(plaintext, key)
                 self.comm.send_message(self.sock, encrypted)
             elif cipher_type == "CA":
-                # 凯撒加密，如果没输入shift值则使用随机值
+
                 key_str = self.entry_key.get()
                 encrypted = CryptoUtils.caesar_encrypt(plaintext, int(key_str))
                 self.comm.send_message(self.sock, encrypted)
             elif cipher_type == "RC4":
-                # 获取密钥输入（可能是字符串或十六进制）
+
                 key_input = self.entry_key.get()
 
                 try:
                     if key_input:
-                        # 先尝试直接作为字符串密钥使用
+
                         try:
                             key = key_input.encode('utf-8')  # 将字符串转换为字节
 
-                            # 如果输入看起来像十六进制（仅包含0-9a-fA-F且长度为偶数）
                             if all(c in '0123456789abcdefABCDEF' for c in key_input) and len(key_input) % 2 == 0:
-                                # 尝试作为十六进制解析
+
                                 key = bytes.fromhex(key_input)
 
-                            # 密钥长度检查（RC4建议至少16字节/128位）
                             if len(key) < 16:
                                 messagebox.showwarning("弱密钥",
                                                        f"RC4密钥建议至少16字节(128位)，当前仅{len(key)}字节\n"
                                                        f"输入的密钥将被直接使用：{key_input}")
                         except ValueError:
-                            # 如果十六进制转换失败，直接使用字符串编码
+
                             key = key_input.encode('utf-8')
                     else:
                         key = None  # 自动生成安全密钥
 
-                    # 执行加密
                     encrypted = CryptoUtils.rc4_encrypt(plaintext, key)
-                    # decrypted = CryptoUtils.rc4_decrypt(encrypted)
-                    # self.log(f"[{decrypted}] Encrypted: {decrypted}")
+
+
                     self.comm.send_message(self.sock, encrypted)
                 except Exception as e:
                     messagebox.showerror("加密错误", f"加密失败: {str(e)}")
@@ -790,8 +749,8 @@ class NormalDe(tk.Frame):
                 encrypted = CryptoUtils.rsa_encrypt(plaintext, public_key)
                 self.comm.send_message(self.sock, encrypted)
                 self.comm.send_message(self.sock, self.key_pair[0])
-                # decrypted = CryptoUtils.rsa_decrypt(encrypted, self.key_pair[0])
-                # self.log(f"[{cipher_type}] decrypted: {decrypted}")
+
+
             elif cipher_type == "ElGamal":
                 public_key = bytes.fromhex(self.entry_key.get()) if self.entry_key.get() else None
                 encrypted = CryptoUtils.elgamal_encrypt(plaintext, public_key)
@@ -822,7 +781,7 @@ class NormalDe(tk.Frame):
     def log(self, msg):
         self.text_area.insert(tk.END, msg + "\n")
         self.text_area.see(tk.END)
-# ===================== Encrypt Transfer (AES/ECC) =====================
+
 class EncryptTransferClient(tk.Frame):
     def __init__(self, master, cipher_type_var):
         super().__init__(master, bg="white")
@@ -895,28 +854,24 @@ class EncryptTransferClient(tk.Frame):
         filename = os.path.basename(filepath)
         filesize = os.path.getsize(filepath)
 
-        # 构建文件头并处理填充
         header = f"{filename}:{filesize}".encode()
 
-        # 如果是DES加密，添加PKCS#7填充
         if isinstance(self.cipher, DESCipher):
             pad_len = 8 - (len(header) % 8)
             header += bytes([pad_len] * pad_len)
 
         try:
-            # 发送文件传输请求
+
             self.comm.send_message(self.sock, b"FILE")
             self.comm.send_message(self.sock, self.cipher_type.get().encode())
             self.comm.send_message(self.sock, self.cipher.encrypt(header))
 
-            # 分块发送文件内容
             with open(filepath, "rb") as f:
                 while True:
                     chunk = f.read(CHUNK_SIZE)
                     if not chunk:
                         break
 
-                    # 如果是DES加密且不是完整块，添加填充
                     if isinstance(self.cipher, DESCipher) and len(chunk) % 8 != 0:
                         pad_len = 8 - (len(chunk) % 8)
                         chunk += bytes([pad_len] * pad_len)
@@ -924,10 +879,8 @@ class EncryptTransferClient(tk.Frame):
                     enc_chunk = self.cipher.encrypt(chunk)
                     self.comm.send_message(self.sock, enc_chunk)
 
-            # 发送结束标志
             self.comm.send_message(self.sock, b"EOF")
 
-            # 接收服务器响应
             response = self.comm.receive_message(self.sock)
             decrypted = self.cipher.decrypt(response)
             self.log(f"[SERVER RESPONSE] {decrypted.decode()}")
@@ -950,7 +903,7 @@ class EncryptTransferClient(tk.Frame):
             return aes.encrypt(data)
 
 global a
-# ===================== 主窗口 =====================
+
 class ClientApp(tk.Tk):
 
     def __init__(self):
@@ -964,32 +917,27 @@ class ClientApp(tk.Tk):
         self.content = tk.Frame(self, bg="white")
         self.content.pack(side="right", fill="both", expand=True)
 
-        # 高亮状态
         self.active_button = None
         self.cipher_type = tk.StringVar(value="AES")
 
-        # ECC Proxy
         self.btn_ecc = tk.Button(sidebar, text="ECC Proxy Mode", bg="#34495e", fg="white",
                                  relief="flat", anchor="w",
                                  command=lambda: self.set_active(self.btn_ecc, "ecc"),
                                  width=30, height=2, borderwidth=0)
         self.btn_ecc.pack(fill="x")
 
-        # DH Secure
         self.btn_dh = tk.Button(sidebar, text="DH Secure Mode", bg="#34495e", fg="white",
                                 relief="flat", anchor="w",
                                 command=lambda: self.set_active(self.btn_dh, "dh"),
                                 width=30, height=2, borderwidth=0)
         self.btn_dh.pack(fill="x")
 
-        # Encrypt Transfer 父菜单
         self.parent_btn = tk.Button(sidebar, text="Encrypt Transfer ▼", bg="#34495e", fg="white",
                                     relief="flat", anchor="w",
                                     command=lambda: self.set_active(self.parent_btn, "parent"),
                                     height=2, width=30, borderwidth=0)
         self.parent_btn.pack(fill="x")
 
-        # 子菜单
         self.submenu = tk.Frame(sidebar, bg="#3b4a59")
         self.submenu.pack(fill="x")
 
@@ -1040,21 +988,18 @@ class ClientApp(tk.Tk):
         self.submenu_visible = True
         self.current_frame = None
 
-        # 默认高亮 AES
         self.set_cipher("AES", self.btn_aes)
 
 
     def set_active(self, button, mode):
-        # 取消上一个按钮高亮
+
         if self.active_button:
             self.active_button.configure(bg="#34495e" if self.active_button in
                                          [self.btn_ecc, self.btn_dh, self.parent_btn] else "#3b4a59")
 
-        # 设置当前按钮高亮
         button.configure(bg="#4a90e2")
         self.active_button = button
 
-        # 切换内容
         if mode == "ecc":
             self.show_ecc()
         elif mode == "dh":
@@ -1075,13 +1020,11 @@ class ClientApp(tk.Tk):
     def set_cipher(self, cipher, button):
         self.cipher_type.set(cipher)
 
-        # 重置所有子菜单按钮颜色
         for btn in [self.btn_aes, self.btn_ecc_sub, self.btn_ca, self.btn_des,
                     self.btn_elgamal, self.btn_md5, self.btn_rc4,
                     self.btn_rsa, self.btn_sm2]:
             btn.configure(bg="#3b4a59")
 
-        # 高亮当前按钮
         button.configure(bg="#4a90e2")
         self.active_button = button
 

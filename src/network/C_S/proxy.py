@@ -124,12 +124,11 @@ class ECCProxyServer:
 
             ecc = ECCCipher()
             priv = ecc.key
-            pub = ecc.generate_public_key(priv)
-            conn.sendall(f"{pub[0]},{pub[1]}".encode('utf-8'))
+            pub = ecc.public_key
+            conn.sendall(f"{pub}".encode('utf-8'))
 
             client_pub_str = conn.recv(1024).decode('utf-8')
-            x, y = map(int, client_pub_str.split(","))
-            client_pub = (x, y)
+            client_pub = int(client_pub_str)
             shared_secret = ecc.generate_shared_secret(priv, client_pub)
             aes_key = ecc.derive_key(shared_secret)[:16]
             aes_cipher = AESCipher(aes_key)

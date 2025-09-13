@@ -145,13 +145,12 @@ class ECCProxyClient(tk.Frame):
 
             ecc = ECCCipher()
             priv = ecc.key
-            pub = ecc.generate_public_key(priv)
+            pub = ecc.public_key
 
             server_pub_str = self.sock.recv(1024).decode('utf-8')
-            x, y = map(int, server_pub_str.split(","))
-            server_pub = (x, y)
+            server_pub = int(server_pub_str)
 
-            self.sock.sendall(f"{pub[0]},{pub[1]}".encode('utf-8'))
+            self.sock.sendall(f"{pub}".encode('utf-8'))
 
             shared_secret = ecc.generate_shared_secret(priv, server_pub)
             aes_key = ecc.derive_key(shared_secret)[:16]
@@ -884,7 +883,7 @@ class EncryptTransferClient(tk.Frame):
         else:
             ecc = ECCCipher()
             priv = ecc.key
-            pub = ecc.generate_public_key(priv)
+            pub = ecc.public_key
             shared = ecc.generate_shared_secret(priv, pub)
             key = ecc.derive_key(shared)[:16]
             aes = AESCipher(key)

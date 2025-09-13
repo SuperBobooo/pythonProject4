@@ -127,7 +127,6 @@ class ECCProxyClient(tk.Frame):
         self.text_area.update()
 
     def connect_server(self):
-        """连接到代理服务器"""
         try:
 
             if self.connection_active:
@@ -182,7 +181,6 @@ class ECCProxyClient(tk.Frame):
             messagebox.showerror("Connection Error", str(e))
 
     def send_request(self):
-        """发送HTTP GET请求"""
         try:
             if not self.connection_active:
                 raise ConnectionError("Not connected to server")
@@ -205,7 +203,6 @@ class ECCProxyClient(tk.Frame):
             messagebox.showerror("Send Error", str(e))
 
     def _send_encrypted(self, data):
-        """加密并发送数据"""
         with self.lock:
             if not self.connection_active:
                 raise ConnectionError("Not connected to server")
@@ -224,7 +221,6 @@ class ECCProxyClient(tk.Frame):
                 raise ConnectionError(f"Send failed: {e}")
 
     def _receive_loop(self):
-        """接收服务器响应的主循环"""
         while self.connection_active:
             try:
                 packet = self.sock.recv(BUFFER_SIZE)
@@ -237,11 +233,6 @@ class ECCProxyClient(tk.Frame):
                     continue
 
                 ciphertext, md5_recv = packet[:-16], packet[-16:]
-
-
-
-
-
                 plaintext = self.aes_cipher.decrypt(ciphertext)
 
                 try:
@@ -261,7 +252,6 @@ class ECCProxyClient(tk.Frame):
         self.disconnect()
 
     def disconnect(self):
-        """安全断开连接"""
         with self.lock:
             self.connection_active = False
             if self.sock:
@@ -277,7 +267,6 @@ class ECCProxyClient(tk.Frame):
             self.log("[CONNECTION] Disconnected from server")
 
     def on_closing(self):
-        """窗口关闭时的清理"""
         self.disconnect()
         self.master.destroy()
 

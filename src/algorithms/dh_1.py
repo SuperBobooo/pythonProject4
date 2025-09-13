@@ -26,12 +26,10 @@ class DHKeyExchange:
         return pow_mod(other_public_key, private_key, self.p)
 
     def derive_aes_key(self, shared_secret):
-        
 
-
-        secret_str = hex(shared_secret)[2:]  # 去掉0x前缀
+        secret_str = hex(shared_secret)[2:]
         if len(secret_str) % 2 != 0:
-            secret_str = '0' + secret_str  # 确保长度为偶数
+            secret_str = '0' + secret_str
 
         secret_bytes = bytes.fromhex(secret_str)
 
@@ -40,4 +38,4 @@ class DHKeyExchange:
         if len(hashed) >= 32:
             return hashed[:32]  # AES-256
         else:
-            return hashed.ljust(32, b'\0')  # 填充到32字节
+            return hashed.ljust(32, b'\0')

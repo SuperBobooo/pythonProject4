@@ -1,0 +1,51 @@
+@startuml
+title DHSecureClient 非线性流程框图
+
+start
+
+:启动程序并初始化GUI;
+
+split
+  :等待用户点击 "Connect";
+  if (点击了Connect?) then (是)
+    :生成DH密钥对(priv, pub);
+    :连接服务器并发送 "DH_REQUEST";
+    :交换公钥并计算共享密钥;
+    :derive AES/CA/DES Key;
+    :初始化对应加密器;
+    :启用消息/文件按钮;
+  else (否)
+    stop
+  endif
+split again
+  :后台线程 receive_data 循环;
+  repeat
+    :接收服务器数据;
+    if (有数据?) then (是)
+      :cipher.decrypt(data);
+      :显示在日志区;
+    endif
+  repeat while (连接未关闭)
+split again
+  :主线程等待用户交互;
+  if (用户点击 "Send Message"?) then (是)
+    :读取输入框消息;
+    :加密消息;
+    :发送 "MESSAGE"+算法类型+密文;
+    :日志显示已发送内容;
+  endif
+
+  if (用户点击 "Send File"?) then (是)
+    :选择文件 (路径,大小);
+    :加密文件头 (文件名+大小);
+    :发送 "FILE"+算法类型+加密头;
+    while (文件分片存在?)
+      :读取分片 -> 加密分片 -> 发送;
+    endwhile
+    :发送 "EOF";
+    :日志显示文件已发送;
+  endif
+end split
+
+stop
+@enduml

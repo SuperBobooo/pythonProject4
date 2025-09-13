@@ -34,21 +34,19 @@ class ICMPSteganography:
             packet = IP(dst=self.target_ip) / ICMP() / payload
             print(f"发送 {idx+1}/{total_chunks} 到 {self.target_ip}，内容：'{chunk}'")
             send(packet)
-            time.sleep(0.05)  # 避免太快发送
+            time.sleep(0.05)
 
-    # 验证是否是伪装信息
+    # 验证伪装信息
     def verify_message(self, payload_bytes: bytes) -> bool:
         try:
             payload_str = self.decode_message(payload_bytes)
             data_json = json.loads(payload_str)
-            # 校验密钥前缀
             if data_json.get("data", "").startswith(self.secret_key + ":"):
                 return True
         except Exception:
             return False
         return False
 
-    # 监听回调函数
     def _sniff_callback(self, packet):
         if ICMP in packet:
             payload_bytes = bytes(packet[ICMP].payload)
@@ -72,20 +70,17 @@ class ICMPSteganography:
 
     def get_message(self) -> str:
         with self.lock:
-            # 按分片索引排序
             return "".join([self.received_data[i] for i in sorted(self.received_data.keys())])
 
 
 if __name__ == "__main__":
     target_ip = "8.8.8.8"
     steg = ICMPSteganography(target_ip, secret_key="secret_key")
-    message = "anbasdbiuasdabsjubdli2qub3fdio2u\nj3bdio2uj3b" * 50  # 测试长消息
+    message = "anbasdbiuasdabsjubdli2qub3fdio2u\nj3bdio2uj3b" * 50
 
-    # 开启监听线程
     listener_thread = threading.Thread(target=steg.start_listening, args=(30,))
     listener_thread.start()
 
-    # 发送消息
     steg.send_message(message, chunk_size=50)
 
     listener_thread.join()
